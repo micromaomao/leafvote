@@ -134,3 +134,54 @@ body
           font-size: 0.9rem
         .createbtn
           color: $color-accent
+
+  .view.manager
+    .createpoll
+      background-color: $color-theme
+      color: $color-white
+      font-size: 1.2rem
+      cursor: pointer
+      padding: 0.2rem 0.6rem
+      margin: 0.2rem auto
+      width: 15rem
+      text-align: center
+    .pollCreationError
+      color: $color-red
+    .empty, .loading, .pollCreationError, .pollsListError
+      text-align: center
+    .empty, .loading, .pollsListError
+      margin-top: 2rem
+    .empty
+      color: $color-secondary-text
+    .pollsListError
+      color: $color-red
+
+    .poll
+      display: flex
+      flex-direction: column
+      flex-wrap: nowrap
+      align-items: stretch
+      max-width: 60rem
+      margin: 1.5rem auto
+      border: dashed $color-lightblue 2px
+      padding: 0.4rem 0.6rem
+      .top
+        display: flex
+        flex-direction: row
+        flex-wrap: nowrap
+        align-items: center
+        flex-grow: 0
+        flex-shrink: 0
+        .labelcontain
+          flex-grow: 1
+          flex-shrink: 1
+          input
+            border: none
+            outline: none
+            background-color: transparent
+            width: 100%
+            font-size: 1.5rem
+        .delete
+          flex-grow: 0
+          flex-shrink: 0
+          color: $color-red

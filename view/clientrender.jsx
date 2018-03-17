@@ -78,7 +78,9 @@ class LeafVote extends React.Component {
       socketState: 'disconnected',
       latency: null,
       login: null,
-      loginning: null
+      loginning: null,
+      polls: null,
+      pollsError: null
     }
     this.messageCallbacks = []
     this.messageId = 0
@@ -87,6 +89,8 @@ class LeafVote extends React.Component {
     this.handleLogin = this.handleLogin.bind(this)
     this.handleCreateManager = this.handleCreateManager.bind(this)
     this.handleLogout = this.handleLogout.bind(this)
+    this.handlePollCreate = this.handlePollCreate.bind(this)
+    this.reloadPolls = this.reloadPolls.bind(this)
   }
 
   initSocket () {
@@ -106,6 +110,15 @@ class LeafVote extends React.Component {
         this.setState({socketState: 'ready', socketError: null})
         if (this.latencySetTimeout !== null) clearTimeout(this.latencySetTimeout)
         this.testLatency()
+        if (this.state.login && this.state.login.secret) {
+          this.sendMessage({type: 'login', secret: this.state.login.secret, role: this.state.login.type}).then(res => {
+            if (res.error) {
+              this.handleLogout()
+            }
+          }, err => {
+            this.handleLogout()
+          })
+        }
       })
       let errored = false
       socket.addEventListener('error', evt => {
@@ -260,6 +273,38 @@ class LeafVote extends React.Component {
             })()}
           </div>
         ) : null}
+        {this.state.login && this.state.login.type === 'manager' ? (
+          <div className='view manager'>
+            {this.state.pollCreation && this.state.pollCreation.loading ? (
+              <div className='createpoll'>Creating</div>) : (<div className='createpoll' onClick={this.handlePollCreate}>Create New Poll</div>)}
+            {this.state.pollCreation && this.state.pollCreation.error ? (
+              <div className='pollCreationError'>{this.state.pollCreation.error.message}</div>
+            ) : null}
+
+            {this.state.polls !== null && this.state.polls.length === 0 ? (
+              <div className='empty'>No polls created.</div>
+            ) : (
+              this.state.pollsError ? <div className='pollsListError'>{this.state.pollsError.message}</div> : (
+                this.state.polls === null ?  <div className='loading'>Loading your polls&hellip;</div> : null
+              )
+            )}
+            {this.state.pollActionError ? <div className='pollsListError'>{this.state.pollActionError.message}</div> : null}
+            {this.state.polls !== null ? this.state.polls.map(poll => {
+              return (
+                <div className='poll' key={poll._id}>
+                  <div className='top'>
+                    <div className='labelcontain'>
+                      <input type='text' value={poll.label} placeholder='(no label)' onChange={evt => this.handleLabelPoll(poll._id, evt.target.value)} />
+                    </div>
+                    <div className='delete' onClick={evt => this.handleDeletePoll(poll._id)}>
+                      Delete
+                    </div>
+                  </div>
+                </div>
+              )
+            }) : null}
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -287,7 +332,10 @@ class LeafVote extends React.Component {
         if (this.state.loginning !== loginning) return
         this.setState({loginning: Object.assign({}, loginning, {error: new Error(res.error), loading: false})})
       } else {
-        this.setState({login: {type: loginning.section, secret: loginning.secretInput}, loginning: null})
+        this.setState({login: {type: loginning.section, secret: loginning.secretInput}, loginning: null, polls: res.polls || null})
+        if (!res.polls) {
+          this.reloadPolls()
+        }
       }
     }, err => {
       if (this.state.loginning !== loginning) return
@@ -352,6 +400,65 @@ class LeafVote extends React.Component {
       login: null,
       loginning: null
     })
+  }
+
+  handlePollCreate () {
+    if (!this.state.login) return
+    this.setState({pollCreation: {loading: true, error: null}})
+    this.sendMessage({type: 'createPoll'}).then(res => {
+      if (res.error) {
+        return void this.setState({pollCreation: {loading: false, error: new Error(res.error)}, pollActionError: null})
+      }
+      this.setState({pollCreation: null, pollActionError: null})
+      this.reloadPolls()
+    }, err => {
+      this.setState({pollCreation: {loading: false, error: err}, pollActionError: null})
+    })
+  }
+
+  reloadPolls () {
+    if (!this.state.login) return
+    this.setState({polls: null, pollsError: null})
+    this.sendMessage({type: 'listPoll'}).then(res => {
+      if (res.error) {
+        return void this.setState({pollsError: new Error(res.error)})
+      }
+      this.setState({polls: res.polls, pollsError: null})
+    }, err => {
+      this.setState({pollsError: err})
+    })
+  }
+
+  sendPollActionMessage (msg) {
+    this.sendMessage(msg).then(res => {
+      if (res.error) {
+        this.reloadPolls()
+        this.setState({pollActionError: new Error(res.error)})
+        return
+      }
+      this.setState({pollActionError: null})
+    }, err => {
+      this.reloadPolls()
+      this.setState({pollActionError: err})
+      return
+    })
+  }
+
+  handleDeletePoll (id) {
+    let poll = this.state.polls.find(x => x._id === id)
+    if (!poll) return
+    this.setState({polls: this.state.polls.filter(x => x !== poll)})
+    this.sendPollActionMessage({type: 'deletePoll', id})
+  }
+
+  handleLabelPoll (id, label) {
+    let poll = this.state.polls.find(x => x._id === id)
+    if (!poll) return
+    this.setState({polls: this.state.polls.map(p => {
+      if (p !== poll) return p
+      return Object.assign({}, p, {label})
+    })})
+    this.sendPollActionMessage({type: 'labelPoll', id, label})
   }
 }
 
