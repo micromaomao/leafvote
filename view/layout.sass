@@ -1,2 +1,54 @@
+$color-secondary-text: #666
+$color-green: #5cb85c
+$color-theme: $color-green
+$color-white: #f9f9f9
+$color-red: #d9534f
+$color-accent: $color-red
+$color-blue: #428bca
+$color-lightblue: #5bc0de
+
 body
-  color: red
+  margin: 0
+  padding: 0
+
+.leafvote
+  display: flex
+  flex-direction: column
+  flex-wrap: nowrap
+
+  .topbar
+    flex-shrink: 0
+    flex-grow: 0
+    border-bottom: dashed 1px $color-accent
+    padding: 0.4rem 0.5rem
+    display: flex
+    flex-direction: row
+    flex-wrap: nowrap
+    justify-content: flex-start
+    align-items: center
+
+    .logo
+      flex-grow: 0
+      flex-shrink: 0
+      font-family: serif
+      font-size: 1.2rem
+      b
+        color: $color-theme
+        font-weight: bold
+        font-style: italic
+
+    .dash
+      flex-shrink: 0
+      flex-grow: 0
+      padding: 0 0.5rem
+      color: $color-secondary-text
+
+    .connection
+      flex-shrink: 0
+      flex-grow: 0
+      &.error
+        color: $color-red
+      &.disconnected
+        color: $color-secondary-text
+      &.ready
+        color: $color-green
