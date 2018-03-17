@@ -294,12 +294,55 @@ class LeafVote extends React.Component {
                 <div className='poll' key={poll._id}>
                   <div className='top'>
                     <div className='labelcontain'>
-                      <input type='text' value={poll.label} placeholder='(no label)' onChange={evt => this.handleLabelPoll(poll._id, evt.target.value)} />
+                      <input type='text' value={poll.label} placeholder='(no label)' onChange={evt => this.handleLabelPoll(poll, evt.target.value)} />
                     </div>
-                    <div className='delete' onClick={evt => this.handleDeletePoll(poll._id)}>
+                    <div className='delete' onClick={evt => this.handleDeletePoll(poll)}>
                       Delete
                     </div>
                   </div>
+                  {!poll.voters && !poll.editingOptions ? (
+                    <div className='bottom'>
+                      <div className='btn' onClick={evt => this.handleLoadVoters(poll)}>
+                        Manage voters
+                      </div>
+                      <div className='btn'>
+                        Manage options (candidates)
+                      </div>
+                    </div>
+                  ) : (
+                    <div className='bottom'>
+                      <div className='btn' onClick={evt => this.handlePollCloseEditing(poll)}>Close</div>
+                      {poll.voters && !poll.voters.opDoing ? [
+                        <input key={0} className='opNumber' type='number' min={1} value={poll.voters.opNumber} onChange={evt => this.handleVoterOpNumberChange(poll, evt.target.value)} />,
+                        <div key={1} className='btn' onClick={evt => this.handleAddVoters(poll)}>Add</div>,
+                        <div key={2} className='btn'>Import from poll</div>,
+                        <div key={3} className='btn'>Remove all</div>,
+                        <input key={4} className='filter' type='text' placeholder='(filter)' value='' />
+                      ] : null}
+                      {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing</div> : null}
+                      {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
+                    </div>
+                  )}
+                  {(() => {
+                    if (!poll.voters) return null
+                    if (poll.voters.loading) return <div className='voters loading'>Loading</div>
+                    if (poll.voters.error) return <div className='voters error'>{poll.voters.error.message}</div>
+                    if (!poll.voters.voters || poll.voters.voters.length === 0) return <div className='voters empty'>No voters added.</div>
+                    return (
+                      <div className='voters list'>
+                        {poll.voters.voters.map(secret => {
+                          return (
+                            <div className='voter'>
+                              <div className='secret'>{secret}</div>
+                              <div className='btns'>
+                                <div className='btn'>Delete</div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             }) : null}
@@ -444,21 +487,89 @@ class LeafVote extends React.Component {
     })
   }
 
-  handleDeletePoll (id) {
-    let poll = this.state.polls.find(x => x._id === id)
-    if (!poll) return
+  handleDeletePoll (poll) {
     this.setState({polls: this.state.polls.filter(x => x !== poll)})
-    this.sendPollActionMessage({type: 'deletePoll', id})
+    this.sendPollActionMessage({type: 'deletePoll', id: poll._id})
   }
 
-  handleLabelPoll (id, label) {
-    let poll = this.state.polls.find(x => x._id === id)
-    if (!poll) return
-    this.setState({polls: this.state.polls.map(p => {
-      if (p !== poll) return p
-      return Object.assign({}, p, {label})
-    })})
-    this.sendPollActionMessage({type: 'labelPoll', id, label})
+  handleLabelPoll (poll, label) {
+    poll.label = label
+    this.forceUpdate()
+    this.sendPollActionMessage({type: 'labelPoll', id: poll._id, label})
+  }
+
+  handleLoadVoters (poll) {
+    poll.voters = {
+      loading: true,
+      error: false,
+      opNumber: 10
+    }
+    this.forceUpdate()
+    let thisVoters = poll.voters
+    this.sendMessage({type: 'getPollVoters', id: poll._id}).then(res => {
+      if (poll.voters !== thisVoters) return
+      if (res.error) {
+        Object.assign(poll.voters, {
+          loading: false,
+          error: new Error(res.error)
+        })
+        this.forceUpdate()
+        return
+      }
+      Object.assign(poll.voters, {
+        loading: false,
+        voters: res.voters
+      })
+      this.forceUpdate()
+    }, err => {
+      if (poll.voters !== thisVoters) return
+      Object.assign(poll.voters, {
+        loading: false,
+        error: err
+      })
+      this.forceUpdate()
+    })
+  }
+
+  handlePollCloseEditing (poll) {
+    poll.voters = poll.editingOptions = null
+    this.forceUpdate()
+  }
+
+  handleVoterOpNumberChange (poll, val) {
+    if (!poll.voters) return
+    poll.voters.opNumber = val
+    this.forceUpdate()
+  }
+
+  handleAddVoters (poll) {
+    if (!poll.voters) return
+    let n = poll.voters.opNumber
+    n = parseInt(n)
+    if (!Number.isSafeInteger(n) || n <= 0) {
+      poll.voters.opError = new Error('Number must be a positive integer.')
+      poll.voters.opDoing = false
+      this.forceUpdate()
+      return
+    }
+    poll.voters.opError = null
+    poll.voters.opDoing = true
+    this.forceUpdate()
+    let thisVoters = poll.voters
+    this.sendMessage({type: 'pollAddVoters', id: poll._id, n}).then(res => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
+      if (res.error) {
+        poll.voters.opError = new Error(res.error)
+      } else {
+        poll.voters.voters = res.voters
+      }
+      this.forceUpdate()
+    }, err => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opError = err
+      this.forceUpdate()
+    })
   }
 }
 

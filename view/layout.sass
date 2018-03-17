@@ -147,13 +147,13 @@ body
       text-align: center
     .pollCreationError
       color: $color-red
-    .empty, .loading, .pollCreationError, .pollsListError
+    > .empty, > .loading, > .pollCreationError, > .pollsListError
       text-align: center
-    .empty, .loading, .pollsListError
+    > .empty, > .loading, > .pollsListError
       margin-top: 2rem
-    .empty
+    > .empty
       color: $color-secondary-text
-    .pollsListError
+    > .pollsListError
       color: $color-red
 
     .poll
@@ -165,13 +165,14 @@ body
       margin: 1.5rem auto
       border: dashed $color-lightblue 2px
       padding: 0.4rem 0.6rem
-      .top
+      .top, .bottom
         display: flex
         flex-direction: row
-        flex-wrap: nowrap
+        flex-wrap: wrap
         align-items: center
         flex-grow: 0
         flex-shrink: 0
+      .top
         .labelcontain
           flex-grow: 1
           flex-shrink: 1
@@ -185,3 +186,51 @@ body
           flex-grow: 0
           flex-shrink: 0
           color: $color-red
+      .bottom
+        align-items: center
+        .btn
+          font-size: 1rem
+          color: $color-green
+          padding: 0.3rem 0.5rem
+          margin: 0 0.5rem
+          cursor: pointer
+        .opNumber
+          width: 5rem
+        .opDoing
+          color: $color-secondary-text
+        .error
+          color: $color-red
+        .filter
+          width: 15rem
+      .voters
+        &.loading, &.error, &.empty
+          text-align: center
+          margin: 0.2rem
+        &.loading, &.empty
+          color: $color-secondary-text
+        &.error
+          color: $color-red
+        &.list
+          display: flex
+          flex-direction: row
+          flex-wrap: wrap
+          align-items: stretch
+          justify-content: center
+          overflow: auto
+          max-height: 70vh
+          .voter
+            flex-grow: 0
+            flex-shrink: 0
+            padding: 0.5rem 1rem
+            font-size: 0.8rem
+            border: solid 1px $color-lightblue
+            background-color: $color-white
+            width: 15rem
+            display: flex
+            flex-direction: row
+            flex-wrap: nowrap
+            .secret, .btns
+              flex-shrink: 0
+              flex-grow: 0
+            .btns
+              margin-left: auto

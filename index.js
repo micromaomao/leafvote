@@ -91,7 +91,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                 } else {
                   authType = 'manager'
                   authIdDoc = manager
-                  Poll.find({manager: manager._id}).then(polls => {
+                  Poll.find({manager: manager._id}, {active: true, options: true, label: true}).then(polls => {
                     reply({polls})
                   }, err => {
                     reply({})
@@ -120,7 +120,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             if (authType !== 'manager' || !authIdDoc) {
               return void reply({error: 'Need to be logged in as manager.'})
             }
-            Poll.find({manager: authIdDoc._id}).then(polls => {
+            Poll.find({manager: authIdDoc._id}, {active: true, options: true, label: true}).then(polls => {
               reply({polls})
             }, err => {
               reply({error: err.message})
@@ -154,7 +154,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               } else {
                 reply({error: "You're not the owner of that poll."})
               }
-            })
+            }, err => { reply({error: err.message}) })
           } else if (obj.type === 'labelPoll') {
             if (authType !== 'manager' || !authIdDoc) {
               return void reply({error: 'Need to be logged in as manager.'})
@@ -176,7 +176,69 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               } else {
                 reply({error: "You're not the owner of that poll."})
               }
-            })
+            }, err => { reply({error: err.message}) })
+          } else if (obj.type === 'getPollVoters') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) {
+                return void reply({error: 'No such poll'})
+              }
+              if (poll.manager.equals(authIdDoc._id)) {
+                reply({voters: poll.voters.map(x => x.toString('base64'))})
+              } else {
+                reply({error: "You're not the owner of that poll."})
+              }
+            }, err => { reply({error: err.message}) })
+          } else if (obj.type === 'pollAddVoters') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) {
+                return void reply({error: 'No such poll'})
+              }
+              if (poll.manager.equals(authIdDoc._id)) {
+                let n = obj.n
+                if (!Number.isSafeInteger(n) || n <= 0) {
+                  return void reply({error: 'n must be a positive integer'})
+                }
+                if (n > 400) {
+                  return void reply({error: 'You can only do maximum 400 at a time.'})
+                }
+                let secrets = []
+                function genSecret () {
+                  if (secrets.length >= n) {
+                    return void done()
+                  }
+                  GetSecret().then(s => {
+                    secrets.push(s)
+                    genSecret()
+                  }, err => {
+                    return void reply({error: err.message})
+                  })
+                }
+                function done () {
+                  Poll.update({_id: poll.id}, {$addToSet: {voters: {$each: secrets}}}, {upsert: false, multi: false}).then(() => {
+                    Poll.findOne({_id: poll._id}, {voters: true}).then(poll => {
+                      if (poll) {
+                        return void reply({voters: poll.voters.map(x => x.toString('base64'))})
+                      } else {
+                        return void reply({})
+                      }
+                    }, err => {
+                      reply({})
+                    })
+                  }, err => {
+                    return void reply({error: err.message})
+                  })
+                }
+                genSecret()
+              } else {
+                reply({error: "You're not the owner of that poll."})
+              }
+            }, err => { reply({error: err.message}) })
           } else {
             throw new Error(`Invalid message type ${obj.type}`)
           }
