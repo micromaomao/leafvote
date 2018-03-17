@@ -52,12 +52,13 @@ module.exports = ({mongodb: db, addWSHandler}) => {
         let obj
         try {
           obj = JSON.parse(msg)
-          if (typeof obj !== 'object') throw new Error()
+          if (typeof obj !== 'object' || Array.isArray(obj)) throw new Error()
         } catch (e) {
           ws.close(1, 'Invalid JSON.')
           closed = true
           return
         }
+        if (!Number.isSafeInteger(obj._id)) obj._id = null
         function reply (ct) {
           ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
         }
