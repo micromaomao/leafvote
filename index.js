@@ -20,20 +20,14 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ({mongodb: db, addWSHandler}) => {
   let rMain = express.Router()
+  let {Manager, Voter, Poll, Vote, GetSecret} = require('./lib/dbModel')(db)
 
-  require('./lib/dbModel.js')(db).then(({}) => {
-    rMain.get('/', function (req, res, next) {
-      res.type('html')
-      res.send(indexHtml)
-    })
-
-    rMain.use('/resources', express.static(path.join(__dirname, 'dist')))
-  }, err => {
-    rMain.use(function (req, res, next) {
-      next(err)
-    })
-    console.error(err)
+  rMain.get('/', function (req, res, next) {
+    res.type('html')
+    res.send(indexHtml)
   })
+
+  rMain.use('/resources', express.static(path.join(__dirname, 'dist')))
 
   addWSHandler({
     hostname: 'leafvote.mww.moe',
@@ -60,12 +54,59 @@ module.exports = ({mongodb: db, addWSHandler}) => {
         }
         if (!Number.isSafeInteger(obj._id)) obj._id = null
         function reply (ct) {
-          ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
+          // TODO
+          setTimeout(() => {
+            ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
+          }, 1000)
         }
-        if (obj.type === 'ping') {
-          reply({})
-        } else {
-          reply({err: `Invalid message type ${obj.type}`})
+        try {
+          if (obj.type === 'ping') {
+            return reply({})
+          } else if (obj.type === 'login') {
+            let sSecret = (obj.secret || '').trim()
+            if (!sSecret) return reply({error: 'Empty secret'})
+            let secret = Buffer.from(sSecret, 'base64')
+            if (obj.role === 'voter') {
+              Voter.findOne({secret}).then(voter => {
+                if (!voter) {
+                  reply({error: 'Invalid secret'})
+                } else {
+                  reply({})
+                }
+              }, err => reply({error: err.message}))
+            } else if (obj.role === 'manager') {
+              Manager.findOne({secret}).then(manager => {
+                if (!manager) {
+                  reply({error: 'Invalid secret'})
+                } else {
+                  Poll.find({manager: manager._id}).then(polls => {
+                    reply({polls})
+                  }, err => {
+                    reply({})
+                  })
+                }
+              })
+            } else {
+              throw new Error(`Invalid role ${obj.role}`)
+            }
+          } else if (obj.type === 'register') {
+            GetSecret().then(secret => {
+              let m = new Manager({
+                secret
+              })
+              m.save().then(() => {
+                reply({secret: secret.toString('base64')})
+              }, err => {
+                reply({error: err.message})
+              })
+            }, err => {
+              reply({error: err.message})
+            })
+          } else {
+            throw new Error(`Invalid message type ${obj.type}`)
+          }
+        } catch (e) {
+          reply({error: e.message})
         }
       })
     }

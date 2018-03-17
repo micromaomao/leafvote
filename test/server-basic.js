@@ -48,7 +48,7 @@ module.exports = (LeafVote, wsHnd) =>
               sendFunc = null
               try {
                 let obj = JSON.parse(msg)
-                obj.should.deepEqual({_id: 1, err: 'Invalid message type foo'})
+                obj.should.deepEqual({_id: 1, error: 'Invalid message type foo'})
                 done()
               } catch (e) {
                 done(e)
