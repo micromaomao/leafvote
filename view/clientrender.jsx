@@ -80,7 +80,8 @@ class LeafVote extends React.Component {
       login: null,
       loginning: null,
       polls: null,
-      pollsError: null
+      pollsError: null,
+      selectingVoterImport: null
     }
     this.messageCallbacks = []
     this.messageId = 0
@@ -276,7 +277,9 @@ class LeafVote extends React.Component {
         {this.state.login && this.state.login.type === 'manager' ? (
           <div className='view manager'>
             {this.state.pollCreation && this.state.pollCreation.loading ? (
-              <div className='createpoll'>Creating</div>) : (<div className='createpoll' onClick={this.handlePollCreate}>Create New Poll</div>)}
+              <div className='createpoll'>Creating</div>) : (
+                this.state.selectingVoterImport ? null : (<div className='createpoll' onClick={this.handlePollCreate}>Create New Poll</div>)
+              )}
             {this.state.pollCreation && this.state.pollCreation.error ? (
               <div className='pollCreationError'>{this.state.pollCreation.error.message}</div>
             ) : null}
@@ -289,53 +292,84 @@ class LeafVote extends React.Component {
               )
             )}
             {this.state.pollActionError ? <div className='pollsListError'>{this.state.pollActionError.message}</div> : null}
+            {this.state.polls !== null && this.state.selectingVoterImport !== null ? (
+              <div className='selectingvoterimportprompt'>
+                Select the poll from which to import voter&hellip;<br />
+                <div className='cancel' onClick={evt => this.handleSelectImportingCancel()}>
+                  Cancel
+                </div>
+              </div>
+            ) : null}
             {this.state.polls !== null ? this.state.polls.map(poll => {
               return (
-                <div className='poll' key={poll._id}>
+                <div className='poll' key={poll._id} onClick={this.state.selectingVoterImport ? (evt => this.handleSelectImportingFrom(poll)) : null}>
                   <div className='top'>
                     <div className='labelcontain'>
-                      <input type='text' value={poll.label} placeholder='(no label)' onChange={evt => this.handleLabelPoll(poll, evt.target.value)} />
+                      {this.state.selectingVoterImport ? (
+                        <div>{poll.label || '(no label)'}</div>
+                      ) : (
+                        <input type='text' value={poll.label} placeholder='(no label)' onChange={evt => this.handleLabelPoll(poll, evt.target.value)} />
+                      )}
                     </div>
-                    <div className='delete' onClick={evt => this.handleDeletePoll(poll)}>
-                      Delete
-                    </div>
+                    {!this.state.selectingVoterImport ? (
+                      <div className='delete' onClick={evt => this.handleDeletePoll(poll)}>
+                        Delete
+                      </div>
+                    ) : null}
                   </div>
-                  {!poll.voters && !poll.editingOptions ? (
-                    <div className='bottom'>
-                      <div className='btn' onClick={evt => this.handleLoadVoters(poll)}>
-                        Manage voters
+                  {this.state.selectingVoterImport ? (
+                    poll._id === this.state.selectingVoterImport.to._id ? (
+                      <div className='selectingtothis'>
+                        Voters will be imported into this poll.
                       </div>
-                      <div className='btn'>
-                        Manage options (candidates)
-                      </div>
-                    </div>
+                    ) : (
+                      poll._id === this.state.selectingVoterImport.selection ? (
+                        <div className='bottom'>
+                          <div className='btn' onClick={evt => this.handleDoImport(poll)}>
+                            Import from this poll
+                          </div>
+                        </div>
+                      ) : null
+                    )
                   ) : (
-                    <div className='bottom'>
-                      <div className='btn' onClick={evt => this.handlePollCloseEditing(poll)}>Close</div>
-                      {poll.voters && !poll.voters.opDoing ? [
-                        <input key={0} className='opNumber' type='number' min={1} value={poll.voters.opNumber} onChange={evt => this.handleVoterOpNumberChange(poll, evt.target.value)} />,
-                        <div key={1} className='btn' onClick={evt => this.handleAddVoters(poll)}>Add</div>,
-                        <div key={2} className='btn'>Import from poll</div>,
-                        <div key={3} className='btn'>Remove all</div>,
-                        <input key={4} className='filter' type='text' placeholder='(filter)' value='' />
-                      ] : null}
-                      {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing</div> : null}
-                      {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
-                    </div>
+                    !poll.voters && !poll.editingOptions ? (
+                      <div className='bottom'>
+                        <div className='btn' onClick={evt => this.handleLoadVoters(poll)}>
+                          Manage voters
+                        </div>
+                        <div className='btn'>
+                          Manage options (candidates)
+                        </div>
+                      </div>
+                    ) : (
+                      <div className='bottom'>
+                        <div className='btn' onClick={evt => this.handlePollCloseEditing(poll)}>Close</div>
+                        {poll.voters && !poll.voters.opDoing ? [
+                          <input key={0} className='opNumber' type='number' min={1} value={poll.voters.opNumber} onChange={evt => this.handleVoterOpNumberChange(poll, evt.target.value)} />,
+                          <div key={1} className='btn' onClick={evt => this.handleAddVoters(poll)}>Add</div>,
+                          <div key={2} className='btn' onClick={evt => this.handleImportVoter(poll)}>Import from poll</div>,
+                          <div key={3} className='btn' onClick={evt => this.handleRemoveAllVoters(poll)}>Remove all</div>,
+                          <input key={4} className='filter' type='text' placeholder='(filter)' value={poll.voters.filter || ''} onChange={evt => this.handleVoterFilterChange(poll, evt.target.value)} />
+                        ] : null}
+                        {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing</div> : null}
+                        {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
+                      </div>
+                    )
                   )}
                   {(() => {
                     if (!poll.voters) return null
+                    if (this.state.selectingVoterImport) return null
                     if (poll.voters.loading) return <div className='voters loading'>Loading</div>
                     if (poll.voters.error) return <div className='voters error'>{poll.voters.error.message}</div>
                     if (!poll.voters.voters || poll.voters.voters.length === 0) return <div className='voters empty'>No voters added.</div>
                     return (
-                      <div className='voters list'>
-                        {poll.voters.voters.map(secret => {
+                      <div className={'voters list' + (poll.voters.opDoing ? ' doing' : '')}>
+                        {poll.voters.voters.filter(x => x.indexOf(poll.voters.filter || '') >= 0).map(secret => {
                           return (
-                            <div className='voter'>
+                            <div className='voter' key={secret}>
                               <div className='secret'>{secret}</div>
                               <div className='btns'>
-                                <div className='btn'>Delete</div>
+                                <div className='btn' onClick={evt => this.handleRemoveOneVoter(poll, secret)}>Delete</div>
                               </div>
                             </div>
                           )
@@ -461,7 +495,7 @@ class LeafVote extends React.Component {
 
   reloadPolls () {
     if (!this.state.login) return
-    this.setState({polls: null, pollsError: null})
+    this.setState({polls: null, pollsError: null, selectingVoterImport: null})
     this.sendMessage({type: 'listPoll'}).then(res => {
       if (res.error) {
         return void this.setState({pollsError: new Error(res.error)})
@@ -543,7 +577,7 @@ class LeafVote extends React.Component {
   }
 
   handleAddVoters (poll) {
-    if (!poll.voters) return
+    if (!poll.voters || poll.voters.opDoing) return
     let n = poll.voters.opNumber
     n = parseInt(n)
     if (!Number.isSafeInteger(n) || n <= 0) {
@@ -567,9 +601,108 @@ class LeafVote extends React.Component {
       this.forceUpdate()
     }, err => {
       if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
       poll.voters.opError = err
       this.forceUpdate()
     })
+  }
+
+  handleRemoveAllVoters (poll) {
+    if (!poll.voters || poll.voters.opDoing) return
+    poll.voters.opDoing = true
+    poll.voters.opError = null
+    this.forceUpdate()
+    let thisVoters = poll.voters
+    this.sendMessage({type: 'pollRemoveAllVoters', id: poll._id}).then(res => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
+      if (res.error) {
+        poll.voters.opError = new Error(res.error)
+      } else {
+        poll.voters.voters = []
+      }
+      this.forceUpdate()
+    }, err => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
+      poll.voters.opError = err
+      this.forceUpdate()
+    })
+  }
+
+  handleRemoveOneVoter (poll, voter) {
+    if (!poll.voters || poll.voters.opDoing) return
+    poll.voters.opDoing = true
+    poll.voters.opError = null
+    this.forceUpdate()
+    let thisVoters = poll.voters
+    this.sendMessage({type: 'pollRemoveVoter', id: poll._id, voter: voter}).then(res => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
+      if (res.error) {
+        poll.voters.opError = new Error(res.error)
+      } else {
+        poll.voters.voters = res.voters
+      }
+      this.forceUpdate()
+    }, err => {
+      if (poll.voters !== thisVoters) return
+      poll.voters.opDoing = false
+      poll.voters.opError = err
+      this.forceUpdate()
+    })
+  }
+
+  handleImportVoter (poll) {
+    if (!poll.voters || poll.voters.opDoing) return
+    this.setState({selectingVoterImport: {
+      to: poll
+    }})
+  }
+
+  handleSelectImportingFrom (poll) {
+    if (!this.state.selectingVoterImport) return
+    this.state.selectingVoterImport.selection = poll._id
+    this.forceUpdate()
+  }
+
+  handleSelectImportingCancel () {
+    this.setState({
+      selectingVoterImport: null
+    })
+  }
+
+  handleDoImport (sourcePoll) {
+    let targetPoll = this.state.selectingVoterImport.to
+    this.setState({
+      selectingVoterImport: null
+    })
+    if (sourcePoll._id === targetPoll._id) return
+    targetPoll.voters.opDoing = true
+    targetPoll.voters.opError = null
+    this.forceUpdate()
+    let thisVoters = targetPoll.voters
+    this.sendMessage({type: 'pollImportVoters', from: sourcePoll._id, to: targetPoll._id}).then(res => {
+      if (targetPoll.voters !== thisVoters) return
+      thisVoters.opDoing = false
+      if (res.error) {
+        thisVoters.opError = new Error(res.error)
+      } else {
+        thisVoters.voters = res.targetPollVoters
+      }
+      this.forceUpdate()
+    }, err => {
+      if (targetPoll.voters !== thisVoters) return
+      thisVoters.opDoing = false
+      thisVoters.opError = err
+      this.forceUpdate()
+    })
+  }
+
+  handleVoterFilterChange (poll, filter) {
+    if (!poll.voters) return
+    poll.voters.filter = filter
+    return void this.forceUpdate()
   }
 }
 

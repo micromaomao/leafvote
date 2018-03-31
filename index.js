@@ -65,7 +65,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                 ws.close(0)
               } catch (e) {}
             }
-          }, 1000)
+          }, 500)
         }
         try {
           if (obj.type === 'ping') {
@@ -239,6 +239,70 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                 reply({error: "You're not the owner of that poll."})
               }
             }, err => { reply({error: err.message}) })
+          } else if (obj.type === 'pollRemoveAllVoters') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) return void reply({error: 'No such poll'})
+              if (poll.manager.equals(authIdDoc._id)) {
+                Poll.update({_id: poll.id}, {$set: {voters: []}}, {upsert: false, multi: false}).then(() => {
+                  return void reply({})
+                }, err => {
+                  return void reply({error: err.message})
+                })
+              } else {
+                return void reply({error: "You're not the owner of that poll."})
+              }
+            })
+          } else if (obj.type === 'pollRemoveVoter') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) return void reply({error: 'No such poll'})
+              if (typeof obj.voter !== 'string') return void reply({error: 'Invalid voter'})
+              if (poll.manager.equals(authIdDoc._id)) {
+                Poll.update({_id: poll.id}, {$pullAll: {voters: [Buffer.from(obj.voter, 'base64')]}}, {upsert: false, multi: false}).then(() => {
+                  Poll.findOne({_id: poll.id}, {voters: true}).then(poll => {
+                    if (!poll) return void reply({})
+                    return void reply({voters: poll.voters.map(x => x.toString('base64'))})
+                  }, err => {
+                    return void reply({})
+                  })
+                }, err => {
+                  return void reply({error: err.message})
+                })
+              } else {
+                return void reply({error: "You're not the owner of that poll."})
+              }
+            })
+          } else if (obj.type === 'pollImportVoters') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Promise.all([Poll.findOne({_id: obj.from}), Poll.findOne({_id: obj.to})]).then(([from, to]) => {
+              if (!from) {
+                return void reply({error: 'Source poll not find.'})
+              }
+              if (!to) {
+                return void reply({error: 'Target poll not find.'})
+              }
+              if (from.manager.equals(authIdDoc._id) && to.manager.equals(authIdDoc._id)) {
+                Poll.update({_id: to._id}, {$addToSet: {voters: {$each: from.voters}}}, {upsert: false, multi: false}).then(() => {
+                  Poll.findOne({_id: to._id}, {voters: true}).then(to => {
+                    if (!to) return void reply({})
+                    return void reply({targetPollVoters: to.voters.map(x => x.toString('base64'))})
+                  }, err => {
+                    return void reply({})
+                  })
+                })
+              } else {
+                return void reply({error: 'Premission denied.'})
+              }
+            }, err => {
+              return void reply({error: err.message})
+            })
           } else {
             throw new Error(`Invalid message type ${obj.type}`)
           }

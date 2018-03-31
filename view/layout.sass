@@ -155,6 +155,17 @@ body
       color: $color-secondary-text
     > .pollsListError
       color: $color-red
+    > .selectingvoterimportprompt
+      text-align: center
+      padding: 0.5rem
+      .cancel
+        background-color: $color-red
+        color: $color-white
+        text-align: center
+        padding: 0.5rem
+        margin: 0.5rem
+        display: inline-block
+        cursor: pointer
 
     .poll
       display: flex
@@ -176,7 +187,7 @@ body
         .labelcontain
           flex-grow: 1
           flex-shrink: 1
-          input
+          input, div
             border: none
             outline: none
             background-color: transparent
@@ -186,6 +197,9 @@ body
           flex-grow: 0
           flex-shrink: 0
           color: $color-red
+          cursor: pointer
+      .selectingtothis
+        padding-left: 1rem
       .bottom
         align-items: center
         .btn
@@ -210,6 +224,9 @@ body
           color: $color-secondary-text
         &.error
           color: $color-red
+        &.doing
+          opacity: 0.5
+          pointer-events: none
         &.list
           display: flex
           flex-direction: row
@@ -234,3 +251,6 @@ body
               flex-grow: 0
             .btns
               margin-left: auto
+              .btn
+                cursor: pointer
+                color: $color-theme
