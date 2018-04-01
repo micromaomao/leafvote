@@ -81,11 +81,14 @@ class LeafVote extends React.Component {
       loginning: null,
       polls: null,
       pollsError: null,
-      selectingVoterImport: null
+      selectingVoterImport: null,
+      pendingVote: {},
+      votingErrors: {}
     }
     this.messageCallbacks = []
     this.messageId = 0
     this.latencySetTimeout = null
+    this.flushVotesTimeout = null
     this.testLatency = this.testLatency.bind(this)
     this.handleLogin = this.handleLogin.bind(this)
     this.handleCreateManager = this.handleCreateManager.bind(this)
@@ -150,6 +153,18 @@ class LeafVote extends React.Component {
         } catch (e) {
           socket.close(1, 'invalid message.')
           this.initSocket()
+          return
+        }
+        if (msg._id === null) {
+          if (msg.type === 'voterPush') {
+            let pollsData = msg.polls
+            if (this.state.login && this.state.login.type === 'voter') {
+              this.setState({
+                polls: pollsData
+              })
+              this.flushVotes()
+            }
+          }
           return
         }
         if (!Number.isSafeInteger(msg._id)) return
@@ -337,22 +352,47 @@ class LeafVote extends React.Component {
                         <div className='btn' onClick={evt => this.handleLoadVoters(poll)}>
                           Manage voters
                         </div>
-                        <div className='btn'>
+                        <div className='btn' onClick={evt => this.handleManageOptions(poll)}>
                           Manage options (candidates)
                         </div>
+                        {!poll.active ? (
+                          <div className='btn' onClick={evt => this.handleSetActive(poll, true)}>
+                            Open opll
+                          </div>
+                        ) : (
+                          <div className='btn' onClick={evt => this.handleSetActive(poll, false)}>
+                            Close poll
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className='bottom'>
-                        <div className='btn' onClick={evt => this.handlePollCloseEditing(poll)}>Close</div>
                         {poll.voters && !poll.voters.opDoing ? [
+                          <div key={-1} className='btn' onClick={evt => this.handlePollCloseEditing(poll)}>Close</div>,
                           <input key={0} className='opNumber' type='number' min={1} value={poll.voters.opNumber} onChange={evt => this.handleVoterOpNumberChange(poll, evt.target.value)} />,
                           <div key={1} className='btn' onClick={evt => this.handleAddVoters(poll)}>Add</div>,
                           <div key={2} className='btn' onClick={evt => this.handleImportVoter(poll)}>Import from poll</div>,
                           <div key={3} className='btn' onClick={evt => this.handleRemoveAllVoters(poll)}>Remove all</div>,
                           <input key={4} className='filter' type='text' placeholder='(filter)' value={poll.voters.filter || ''} onChange={evt => this.handleVoterFilterChange(poll, evt.target.value)} />
                         ] : null}
-                        {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing</div> : null}
+                        {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing&hellip;</div> : null}
                         {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
+                        {poll.editingOptions && !poll.optionsDoing ? [
+                          <div key={0} className='btn' onClick={evt => this.handleCancelOptionsEditor(poll)}>
+                            Cancel
+                          </div>,
+                          <div key={1} className='btn' onClick={evt => this.handleSaveOptions(poll)}>
+                            Save
+                          </div>
+                        ] : null}
+                        {poll.editingOptions && poll.optionsDoing ? (
+                          <div className='opDoing'>
+                            Saving&hellip;
+                          </div>
+                        ) : null}
+                        {poll.editingOptions && poll.optionsSetError ? (
+                          <div className='error'>{poll.optionsSetError.message}</div>
+                        ) : null}
                       </div>
                     )
                   )}
@@ -377,6 +417,49 @@ class LeafVote extends React.Component {
                       </div>
                     )
                   })()}
+                  {poll.editingOptions ? (
+                    <div className='optionseditor'>
+                      <textarea value={poll.optionsEditorValue} onChange={evt => this.handleOptionsEditorInput(poll, evt.target.value)} disabled={poll.optionsDoing} />
+                    </div>
+                  ) : null}
+                </div>
+              )
+            }) : null}
+          </div>
+        ) : null}
+        {this.state.login && this.state.login.type === 'voter' ? (
+          <div className='view voter'>
+            {!this.state.polls ? (
+              <div className='loading'>
+                Loading polls&hellip;
+              </div>
+            ) : null}
+            {Array.isArray(this.state.polls) ? this.state.polls.map(poll => {
+              let pending = this.state.pendingVote[poll._id] || null
+              let vote = pending ? pending : (poll.vote ? poll.vote.votedFor : null)
+              let voteReachedServer = poll.vote && (poll.vote.votedFor === pending || pending === null)
+              let votingError = this.state.votingErrors[poll._id]
+              return (
+                <div className={'poll' + (!poll.active ? ' inactive' : '')} key={poll._id}>
+                  {votingError ? (
+                    <div className='error'>Error: {votingError.message} - your vote is <b>not</b> counted yet. Check your network or contact staff.</div>
+                  ) : null}
+                  <div className='label'>{poll.label}</div>
+                  <div className='status'>
+                    {poll.active ? (
+                      !vote ? 'Please cast your vote:' : (
+                        voteReachedServer ? 'Your vote is recorded. Thank you.' : 'Casting your vote\u2026'
+                      )
+                    ) : 'Poll not open.'}
+                  </div>
+                  {poll.options.map(cand => (
+                    <div
+                      key={cand}
+                      className={'option' + (vote === cand ? ' votedthis' : '') + (vote === cand && !voteReachedServer ? ' pending' : '') + (vote && vote !== cand ? ' notthis' : '')}
+                      onClick={poll.active && vote !== cand ? (evt => this.handleVote(poll, cand)) : null} >
+                      {cand}
+                    </div>
+                  ))}
                 </div>
               )
             }) : null}
@@ -410,7 +493,7 @@ class LeafVote extends React.Component {
         this.setState({loginning: Object.assign({}, loginning, {error: new Error(res.error), loading: false})})
       } else {
         this.setState({login: {type: loginning.section, secret: loginning.secretInput}, loginning: null, polls: res.polls || null})
-        if (!res.polls) {
+        if (!res.polls && loginning.section === 'manager') {
           this.reloadPolls()
         }
       }
@@ -702,7 +785,112 @@ class LeafVote extends React.Component {
   handleVoterFilterChange (poll, filter) {
     if (!poll.voters) return
     poll.voters.filter = filter
-    return void this.forceUpdate()
+    this.forceUpdate()
+  }
+
+  handleManageOptions (poll) {
+    poll.editingOptions = true
+    poll.optionsEditorValue = poll.options.join('\n')
+    this.forceUpdate()
+  }
+
+  handleCancelOptionsEditor (poll) {
+    poll.editingOptions = false
+    poll.optionsEditorValue = null
+    poll.optionsSetError = null
+    this.forceUpdate()
+  }
+
+  handleOptionsEditorInput (poll, value) {
+    poll.optionsEditorValue = value
+    this.forceUpdate()
+  }
+
+  handleSaveOptions (poll) {
+    if (poll.optionsEditorValue === null && !poll.editingOptions) return
+    poll.optionsDoing = true
+    let options = poll.optionsEditorValue.split('\n').filter(x => x.trim() !== '')
+    this.forceUpdate()
+    this.sendMessage({type: 'pollSetOptions', id: poll._id, options}).then(res => {
+      poll.optionsDoing = false
+      if (res.error) {
+        poll.optionsSetError = new Error(res.error)
+      } else {
+        poll.optionsSetError = null
+        poll.optionsEditorValue = null
+        poll.editingOptions = false
+        poll.options = options
+      }
+      this.forceUpdate()
+    }, err => {
+      poll.optionsDoing = false
+      poll.optionsSetError = err
+      this.forceUpdate()
+    })
+  }
+
+  handleSetActive (poll, active) {
+    let oldState = poll.active
+    if (oldState === active) return
+    poll.active = active
+    this.setState({pollsError: null})
+    this.sendMessage({type: 'pollSetActive', id: poll._id, active}).then(res => {
+      if (res.error) {
+        this.reloadPolls()
+        this.setState({pollsError: new Error(res.error)})
+      }
+    }, err => {
+      this.reloadPolls()
+      this.setState({pollsError: err})
+    })
+  }
+
+  handleVote (poll, cand) {
+    this.state.pendingVote[poll._id] = cand
+    this.forceUpdate()
+    this.flushVotes()
+  }
+
+  flushVotes () {
+    if (this.flushVotesTimeout !== null) {
+      clearTimeout(this.flushVotesTimeout)
+      this.flushVotesTimeout = null
+    }
+    if (this.state.login && this.state.login.type === 'voter' && this.state.polls && this.state.polls.length > 0) {
+      let votesToFlush = []
+      for (let pollId in this.state.pendingVote) {
+        if (!this.state.pendingVote.hasOwnProperty(pollId)) continue
+        let poll = this.state.polls.find(x => x._id === pollId)
+        if (!poll) continue
+        if (!poll.vote || poll.vote.votedFor !== this.state.pendingVote[pollId]) {
+          this.sendMessage({type: 'vote', pollId, option: this.state.pendingVote[pollId]}).then(res => {
+            if (res.error) {
+              this.state.votingErrors[pollId] = new Error(res.error)
+              this.setFlushVoteTimeout()
+            } else {
+              delete this.state.votingErrors[pollId]
+            }
+            this.forceUpdate()
+          }, err => {
+            this.state.votingErrors[pollId] = err
+            this.forceUpdate()
+            this.setFlushVoteTimeout()
+          })
+        } else {
+          delete this.state.votingErrors[pollId]
+        }
+      }
+      this.forceUpdate()
+    }
+  }
+
+  setFlushVoteTimeout () {
+    if (this.flushVotesTimeout !== null) {
+      this.flushVotesTimeout = setTimeout(() => {
+        this.flushVotesTimeout = null
+        this.flushVotes()
+      })
+    }
   }
 }
 

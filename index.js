@@ -20,7 +20,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ({mongodb: db, addWSHandler}) => {
   let rMain = express.Router()
-  let {Manager, Voter, Poll, Vote, GetSecret} = require('./lib/dbModel')(db)
+  let {Manager, Poll, Vote, GetSecret} = require('./lib/dbModel')(db)
 
   rMain.get('/', function (req, res, next) {
     res.type('html')
@@ -38,6 +38,55 @@ module.exports = ({mongodb: db, addWSHandler}) => {
       let closed = false
       let authIdDoc = null
       let authType = null
+      let authVoterSecret = null
+      let voterPushInterval = null
+      function voterInfoPush () {
+        if (closed) {
+          if (voterPushInterval !== null) {
+            clearInterval(voterPushInterval)
+            voterPushInterval = null
+          }
+          return
+        }
+        if (authType !== 'voter' || authVoterSecret === null) return
+        Poll.aggregate([
+          {$match: {voters: authVoterSecret}},
+          {$lookup: {
+            from: Vote.collection.name,
+            let: { pid: '$_id' },
+            pipeline: [ {$match: {$expr: {$and: [{$eq: ['$pollId', '$$pid']}, {$eq: ['$doneBy', {$literal: authVoterSecret}]}]}}}, {$project: {_id: false, votedFor: true, valid: true}} ],
+            as: 'votes'
+          }},
+          {$project: {
+            _id: true,
+            active: true,
+            options: true,
+            label: true,
+            vote: {$arrayElemAt: ['$votes', -1]}
+          }},
+          {$sort: {
+            active: -1,
+            label: 1
+          }}
+        ]).then(polls => {
+          if (closed) return
+          try {
+            ws.send(JSON.stringify({
+              _id: null,
+              type: 'voterPush',
+              polls
+            }))
+          } catch (e) {
+            try {
+              ws.close(0)
+              closed = true
+            } catch (e) {}
+          }
+        }, err => {
+          // TODO
+          console.error(err)
+        })
+      }
       ws.on('message', function (msg) {
         if (closed) return
         if (typeof msg !== 'string') {
@@ -63,6 +112,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             } catch (e) {
               try {
                 ws.close(0)
+                closed = true
               } catch (e) {}
             }
           }, 500)
@@ -75,15 +125,17 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             if (!sSecret) return reply({error: 'Empty secret'})
             let secret = Buffer.from(sSecret, 'base64')
             if (obj.role === 'voter') {
-              Voter.findOne({secret}).then(voter => {
-                if (!voter) {
-                  reply({error: 'Invalid secret'})
-                } else {
+              Poll.findOne({voters: secret}, {_id: true}).then(poll => {
+                if (poll) {
                   authType = 'voter'
-                  authIdDoc = voter
+                  authVoterSecret = secret
+                  voterPushInterval = setInterval(voterInfoPush, 1000)
                   reply({})
+                  voterInfoPush()
+                } else {
+                  reply({error: "Double check your secret."})
                 }
-              }, err => reply({error: err.message}))
+              })
             } else if (obj.role === 'manager') {
               Manager.findOne({secret}).then(manager => {
                 if (!manager) {
@@ -97,6 +149,8 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                     reply({})
                   })
                 }
+              }, err => {
+                reply({error: err.message})
               })
             } else {
               throw new Error(`Invalid role ${obj.role}`)
@@ -254,7 +308,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               } else {
                 return void reply({error: "You're not the owner of that poll."})
               }
-            })
+            }, err => { reply({error: err.message}) })
           } else if (obj.type === 'pollRemoveVoter') {
             if (authType !== 'manager' || !authIdDoc) {
               return void reply({error: 'Need to be logged in as manager.'})
@@ -263,8 +317,8 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               if (!poll) return void reply({error: 'No such poll'})
               if (typeof obj.voter !== 'string') return void reply({error: 'Invalid voter'})
               if (poll.manager.equals(authIdDoc._id)) {
-                Poll.update({_id: poll.id}, {$pullAll: {voters: [Buffer.from(obj.voter, 'base64')]}}, {upsert: false, multi: false}).then(() => {
-                  Poll.findOne({_id: poll.id}, {voters: true}).then(poll => {
+                Poll.update({_id: poll._id}, {$pullAll: {voters: [Buffer.from(obj.voter, 'base64')]}}, {upsert: false, multi: false}).then(() => {
+                  Poll.findOne({_id: poll._id}, {voters: true}).then(poll => {
                     if (!poll) return void reply({})
                     return void reply({voters: poll.voters.map(x => x.toString('base64'))})
                   }, err => {
@@ -276,6 +330,8 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               } else {
                 return void reply({error: "You're not the owner of that poll."})
               }
+            }, err => {
+              return void reply({error: err.message})
             })
           } else if (obj.type === 'pollImportVoters') {
             if (authType !== 'manager' || !authIdDoc) {
@@ -303,11 +359,71 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             }, err => {
               return void reply({error: err.message})
             })
+          } else if (obj.type === 'pollSetOptions') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            let options = obj.options
+            if (!Array.isArray(options) || !options.every(x => typeof x === 'string')) return void reply({error: 'options must be an array of strings.'})
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) return void reply({error: 'No such poll'})
+              if (poll.manager.equals(authIdDoc._id)) {
+                Poll.update({_id: poll._id}, {$set: {options}}, {upsert: false, multi: false}).then(() => {
+                  return void reply({})
+                }, err => {
+                  return void reply({error: err.message})
+                })
+              } else {
+                return void reply({error: "You're not the owner of that poll."})
+              }
+            }, err => {
+              return void reply({error: err.message})
+            })
+          } else if (obj.type === 'pollSetActive') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (!poll) return void reply({error: 'No such poll'})
+              if (poll.manager.equals(authIdDoc._id)) {
+                Poll.update({_id: poll._id}, {$set: {active: !!obj.active}}, {upsert: false, multi: false}).then(() => {
+                  return void reply({})
+                }, err => {
+                  return void reply({error: err.message})
+                })
+              } else {
+                return void reply({error: "You're not the owner of that poll."})
+              }
+            }, err => {
+              return void reply({error: err.message})
+            })
+          } else if (obj.type === 'vote') {
+            if (authType !== 'voter' || !authVoterSecret) {
+              return void reply({error: 'Need to be logged in as voter.'})
+            }
+            if (typeof obj.option !== 'string') return void reply({error: 'Need "option" to be a string.'})
+            Poll.findOne({_id: obj.pollId, voters: authVoterSecret}).then(poll => {
+              if (!poll) return void reply({error: "Either no such poll, or you don't have the permission to vote."})
+              Vote.update({pollId: poll._id, doneBy: authVoterSecret}, {$set: {votedFor: obj.option}, $setOnInsert: {valid: true}}, {multi: false, upsert: true}).then(() => {
+                return void reply({})
+              }, err => {
+                return void reply({error: err.message})
+              })
+            }, err => {
+              return void reply({error: err.message})
+            })
           } else {
             throw new Error(`Invalid message type ${obj.type}`)
           }
         } catch (e) {
           reply({error: e.message})
+        }
+      })
+      ws.on('close', () => {
+        closed = true
+        if (voterPushInterval !== null) {
+          clearInterval(voterPushInterval)
+          voterPushInterval = null
         }
       })
     }
