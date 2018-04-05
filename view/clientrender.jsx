@@ -242,7 +242,7 @@ class LeafVote extends React.Component {
     let queryMatch = window.location.href.match(/\?s=.+$/)
     this.initSocket().then(() => {
       if (queryMatch) {
-        let secret = queryMatch[0].substr(3)
+        let secret = decodeURIComponent(queryMatch[0].substr(3))
         this.setState({
           loginning: {
             section: 'voter',
