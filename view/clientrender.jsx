@@ -86,7 +86,8 @@ class LeafVote extends React.Component {
       selectingVoterImport: null,
       pendingVote: {},
       votingErrors: {},
-      presentingPoll: null
+      presentingPoll: null,
+      secretUrl: false
     }
     this.messageCallbacks = []
     this.messageId = 0
@@ -102,99 +103,106 @@ class LeafVote extends React.Component {
   }
 
   initSocket () {
-    if (this.state.socket) {
-      if (this.state.socket.readyState === WebSocket.OPEN) return
-    }
-    for (let msgCb of this.messageCallbacks) {
-      try {
-        msgCb(new Error('disconnected'), null)
-      } catch (e) {}
-    }
-    this.messageCallbacks = []
-    try {
-      let socket = new WebSocket('wss://leafvote.mww.moe')
-      this.setState({socket})
-      socket.addEventListener('open', evt => {
-        this.setState({socketState: 'ready', socketError: null})
-        if (this.latencySetTimeout !== null) clearTimeout(this.latencySetTimeout)
-        this.testLatency()
-        if (this.state.login && this.state.login.secret) {
-          this.sendMessage({type: 'login', secret: this.state.login.secret, role: this.state.login.type}).then(res => {
-            if (res.error) {
-              this.handleLogout()
-            }
-            if (this.state.presentingPoll) {
-              this.sendMessage({type: 'poll-subscribe', id: this.state.presentingPoll.poll._id}).then(res => {
-                if (res.error) {
-                  this.handleExitPresentation()
-                }
-              }, err => {
-                this.handleExitPresentation()
-              })
-            }
-          }, err => {
-            this.handleLogout()
-          })
-        }
-      })
-      let errored = false
-      socket.addEventListener('error', evt => {
-        let socketError = evt.error
-        if (!socketError) socketError = new Error('Network error')
-        this.setState({socketState: 'disconnected', socketError, socket: null})
+    return new Promise((resolve, reject) => {
+      if (this.state.socket) {
+        if (this.state.socket.readyState === WebSocket.OPEN) return void resolve()
+      }
+      for (let msgCb of this.messageCallbacks) {
         try {
-          socket.close(0, 'error occured.')
+          msgCb(new Error('disconnected'), null)
         } catch (e) {}
-        setTimeout(() => {
-          this.initSocket()
-        }, 100)
-        errored = true
-      })
-      socket.addEventListener('close', evt => {
-        if (errored) return
-        this.setState({socketState: 'disconnected'})
-        this.initSocket()
-      })
-      socket.addEventListener('message', evt => {
-        let {messageCallbacks} = this
-        let msg = evt.data
-        if (typeof msg !== 'string') {
-          return
-        }
-        try {
-          msg = JSON.parse(msg)
-        } catch (e) {
-          socket.close(1, 'invalid message.')
-          this.initSocket()
-          return
-        }
-        if (msg._id === null) {
-          if (msg.type === 'voterPush') {
-            let pollsData = msg.polls
-            if (this.state.login && this.state.login.type === 'voter') {
-              this.setState({
-                polls: pollsData
-              })
-              this.flushVotes()
-            }
-          } else if (msg.type === 'presentationPush') {
-            let pollId = msg.meta._id
-            if (this.state.presentingPoll && this.state.presentingPoll.poll._id === pollId) {
-              this.state.presentingPoll.data = msg
-              this.forceUpdate()
-            }
+      }
+      this.messageCallbacks = []
+      try {
+        let socket = new WebSocket('wss://leafvote.mww.moe')
+        this.setState({socket})
+        socket.addEventListener('open', evt => {
+          this.setState({socketState: 'ready', socketError: null})
+          if (this.latencySetTimeout !== null) clearTimeout(this.latencySetTimeout)
+          this.testLatency()
+          if (this.state.login && this.state.login.secret) {
+            this.sendMessage({type: 'login', secret: this.state.login.secret, role: this.state.login.type}).then(res => {
+              if (res.error) {
+                this.handleLogout()
+              }
+              if (this.state.presentingPoll) {
+                this.sendMessage({type: 'poll-subscribe', id: this.state.presentingPoll.poll._id}).then(res => {
+                  if (res.error) {
+                    this.handleExitPresentation()
+                  }
+                }, err => {
+                  this.handleExitPresentation()
+                })
+              }
+              resolve()
+            }, err => {
+              this.handleLogout()
+              resolve()
+            })
+          } else {
+            resolve()
           }
-          return
-        }
-        if (!Number.isSafeInteger(msg._id)) return
-        if (!messageCallbacks[msg._id]) return
-        messageCallbacks[msg._id](null, msg)
-        delete messageCallbacks[msg._id]
-      })
-    } catch (e) {
-      this.setState({socketState: 'disconnected', socketError: e, socket: null})
-      setTimeout(() => this.initSocket(), 1000)
-    }
+        })
+        let errored = false
+        socket.addEventListener('error', evt => {
+          let socketError = evt.error
+          if (!socketError) socketError = new Error('Network error')
+          this.setState({socketState: 'disconnected', socketError, socket: null})
+          try {
+            socket.close(0, 'error occured.')
+          } catch (e) {}
+          setTimeout(() => {
+            this.initSocket()
+          }, 100)
+          errored = true
+        })
+        socket.addEventListener('close', evt => {
+          if (errored) return
+          this.setState({socketState: 'disconnected'})
+          this.initSocket()
+        })
+        socket.addEventListener('message', evt => {
+          let {messageCallbacks} = this
+          let msg = evt.data
+          if (typeof msg !== 'string') {
+            return
+          }
+          try {
+            msg = JSON.parse(msg)
+          } catch (e) {
+            socket.close(1, 'invalid message.')
+            this.initSocket()
+            return
+          }
+          if (msg._id === null) {
+            if (msg.type === 'voterPush') {
+              let pollsData = msg.polls
+              if (this.state.login && this.state.login.type === 'voter') {
+                this.setState({
+                  polls: pollsData
+                })
+                this.flushVotes()
+              }
+            } else if (msg.type === 'presentationPush') {
+              let pollId = msg.meta._id
+              if (this.state.presentingPoll && this.state.presentingPoll.poll._id === pollId) {
+                this.state.presentingPoll.data = msg
+                this.forceUpdate()
+              }
+            }
+            return
+          }
+          if (!Number.isSafeInteger(msg._id)) return
+          if (!messageCallbacks[msg._id]) return
+          messageCallbacks[msg._id](null, msg)
+          delete messageCallbacks[msg._id]
+        })
+      } catch (e) {
+        this.setState({socketState: 'disconnected', socketError: e, socket: null})
+        setTimeout(() => this.initSocket(), 1000)
+        reject()
+      }
+    })
   }
 
   testLatency () {
@@ -231,7 +239,22 @@ class LeafVote extends React.Component {
   }
 
   componentDidMount () {
-    this.initSocket()
+    let queryMatch = window.location.href.match(/\?s=.+$/)
+    this.initSocket().then(() => {
+      if (queryMatch) {
+        let secret = queryMatch[0].substr(3)
+        this.setState({
+          loginning: {
+            section: 'voter',
+            secretInput: secret
+          }
+        })
+        this.handleLogin()
+      }
+    })
+    if (queryMatch) {
+      this.setState({secretUrl: true})
+    }
   }
   componentDidUpdate (prevProps, prevState) {
     if (this.state.loginning) {
@@ -261,7 +284,7 @@ class LeafVote extends React.Component {
             </div>
           ]}
         </div>
-        {this.state.login === null ? (
+        {this.state.login === null && !this.state.secretUrl ? (
           <div className='view login'>
             <h1>Who are you?</h1>
             {(() => {
@@ -312,6 +335,11 @@ class LeafVote extends React.Component {
                 </div>
               }
             })()}
+          </div>
+        ) : null}
+        {!this.state.login && this.state.secretUrl ? (
+          <div className='view login'>
+            Logging you in&hellip;
           </div>
         ) : null}
         {this.state.login && this.state.login.type === 'manager' && !this.state.presentingPoll ? (
@@ -633,6 +661,7 @@ class LeafVote extends React.Component {
       loginning
     })
     this.sendMessage({type: 'login', secret: loginning.secretInput, role: loginning.section}).then(res => {
+      this.setState({secretUrl: false})
       if (res.error) {
         if (this.state.loginning !== loginning) return
         this.setState({loginning: Object.assign({}, loginning, {error: new Error(res.error), loading: false})})
@@ -643,6 +672,7 @@ class LeafVote extends React.Component {
         }
       }
     }, err => {
+      this.setState({secretUrl: false})
       if (this.state.loginning !== loginning) return
       this.setState({loginning: Object.assign({}, loginning, {error: err, loading: false})})
     })
