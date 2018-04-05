@@ -6,6 +6,8 @@ require('fetch-polyfill')
 const React = require('react')
 const ReactDOM = require('react-dom')
 
+const TicketTex = require('raw-loader!../voterticket.tex')
+
 // Polyfill
 window.requestIdleCallback = window.requestIdleCallback || (func => setTimeout(func, 1000))
 window.cancelIdleCallback = window.cancelIdleCallback || (id => clearTimeout(id))
@@ -399,7 +401,10 @@ class LeafVote extends React.Component {
                           <div key={1} className='btn' onClick={evt => this.handleAddVoters(poll)}>Add</div>,
                           <div key={2} className='btn' onClick={evt => this.handleImportVoter(poll)}>Import from poll</div>,
                           <div key={3} className='btn' onClick={evt => this.handleRemoveAllVoters(poll)}>Remove all</div>,
-                          <input key={4} className='filter' type='text' placeholder='(filter)' value={poll.voters.filter || ''} onChange={evt => this.handleVoterFilterChange(poll, evt.target.value)} />
+                          <input key={4} className='filter' type='text' placeholder='(filter)' value={poll.voters.filter || ''} onChange={evt => this.handleVoterFilterChange(poll, evt.target.value)} />,
+                          <div key={5} className='btn' onClick={evt => this.handleExportTex(poll)}>
+                            Export voting ticket tex
+                          </div>
                         ] : null}
                         {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing&hellip;</div> : null}
                         {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
@@ -1048,6 +1053,45 @@ class LeafVote extends React.Component {
       presentingPoll: null
     })
     this.sendMessage({type: 'poll-unsubscribe'})
+  }
+
+  handleExportTex (poll) {
+    if (!poll.voters || !poll.voters.voters) return
+    let voters = poll.voters.voters.filter(x => x.indexOf(poll.voters.filter || '') >= 0)
+    let t = ''
+    const iX = 4, iY = 264
+    let cX = iX, cY = iY
+    const xInc = 82, yInc = 31
+    const pageW = 210, pageH = 297
+    let currentPageTex = ''
+    for (let secret of voters) {
+      currentPageTex += `\\begin{scope}[shift={(${cX}mm,${cY}mm)}]\n` +
+                        `  \\slitcontent{${secret}}{${encodeURIComponent(secret).replace(/%/g, '\\%')}}\n` +
+                        `\\end{scope}\n`
+      if (cX + xInc*2 < pageW) {
+        cX += xInc
+      } else {
+        cX = iX
+        if (cY - yInc > 0) {
+          cY -= yInc
+        } else {
+          cY = iY
+          t += '\\pg{\n'
+          t += currentPageTex.replace(/^/gm, '  ').replace(/\n  $/, '\n')
+          t += '}%\n'
+          currentPageTex = ''
+        }
+      }
+    }
+    if (currentPageTex.trim().length > 0) {
+      t += '\\pg{\n'
+      t += currentPageTex.replace(/^/gm, '  ').replace(/\n  $/, '\n')
+      t += '}%\n'
+      currentPageTex = ''
+    }
+    let result = TicketTex.replace(/^\s+%%%%%%% PLACEHOLDER %%%%%%%$/m, t.replace(/^/gm, '  '))
+    let url = 'data:text/plain,' + encodeURIComponent(result)
+    window.open(url)
   }
 }
 

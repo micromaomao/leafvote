@@ -1,0 +1,57 @@
+\documentclass{article}
+\usepackage[paperheight=297mm,paperwidth=210mm,margin=0mm]{geometry}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{pst-barcode}
+\usetikzlibrary{calc}
+\begin{document}%
+  \definecolor{theme}{HTML}{428bca}%
+  \definecolor{leaf}{HTML}{5cb85c}%
+  \def\slitcontent#1#2{%
+    \path[draw=theme, dashed, fill=white, thick] (0, 0) rectangle (80mm, 29mm);
+    \node (logo) at (2mm, 27mm) {{\Large\textit{\textbf{\color{leaf}Leaf}}Vote} voting ticket};
+    \node[font=\normalsize] (secretlabel) at (logo.south west) {Your secret:};
+    \node[font=\LARGE, theme!80!black] (secret) at (secretlabel.south west) {\texttt{#1}};
+    \node[font=\large, red] (donotdisclose) at (secret.south west) {\textsc{Do Not Disclose}};
+
+    \node[anchor=north east, text width=25mm, text height=25mm, text height=25mm, inner sep=0mm] (qrcode) at (78mm, 27mm) {%
+      \begin{pspicture}(25mm,25mm)%
+        % 25mm = 0.984252in
+        \psbarcode{https://leafvote.mww.moe/?s=#2}{width=0.984252 height=0.984252}{qrcode}%
+      \end{pspicture}%
+    };
+  }%
+  \def\pg#1{%
+    \clearpage%
+    \noindent\begin{tikzpicture}[anchor=north west, font=\large]
+      \path[use as bounding box] (current page.north west) rectangle (current page.south east);
+      \foreach \cx in {-297,-292,...,297} {
+        \path[draw=theme!10!white, line width=2mm, x=1mm] let \p1 = (current page.north west), \p2 = (current page.south east) in ($(\cx, \y1) + (0, 10mm)$) -- ($(\cx, \y2) + (200, -10mm)$);
+      }
+      #1
+    \end{tikzpicture}
+  }%
+  % \pg{
+  %   \begin{scope}[shift={(6mm,241mm)}]
+  %     \slitcontent{BpBHrWl3I6HC}{AAAA}
+  %   \end{scope}
+  %   \begin{scope}[shift={(90mm,241mm)}]
+  %     \slitcontent{PcmYrU2OmEZx}{BBBB\%22}
+  %   \end{scope}
+  %   \begin{scope}[shift={(6mm,187mm)}]
+  %     \slitcontent{+YQELrC4NK59}{CCCC\%33\%44CCC}
+  %   \end{scope}
+  %   \begin{scope}[shift={(90mm,187mm)}]
+  %     \slitcontent{etn7J/uZkuOn}{DDDD}
+  %   \end{scope}
+  % }%
+  % \pg{
+  %   \begin{scope}[shift={(6mm,241mm)}]
+  %     \slitcontent{eoi9AdRsmLmy}{AAAA}
+  %   \end{scope}
+  %   \begin{scope}[shift={(90mm,241mm)}]
+  %     \slitcontent{QfvJ+9kh1ODq}{BBBB\%22}
+  %   \end{scope}
+  % }%
+  %%%%%%% PLACEHOLDER %%%%%%%
+\end{document}

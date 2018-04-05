@@ -106,17 +106,14 @@ module.exports = ({mongodb: db, addWSHandler}) => {
         }
         if (!Number.isSafeInteger(obj._id)) obj._id = null
         function reply (ct) {
-          // TODO
-          setTimeout(() => {
+          try {
+            ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
+          } catch (e) {
             try {
-              ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
-            } catch (e) {
-              try {
-                ws.close(0)
-                closed = true
-              } catch (e) {}
-            }
-          }, 500)
+              ws.close(0)
+              closed = true
+            } catch (e) {}
+          }
         }
         try {
           if (obj.type === 'ping') {
@@ -157,6 +154,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               throw new Error(`Invalid role ${obj.role}`)
             }
           } else if (obj.type === 'register') {
+            return void reply({error: 'This is currently a private server unavailable for public use. Sorry about that\u2026 If you want to use LeafVote, run it on your own server.'})
             GetSecret().then(secret => {
               let m = new Manager({
                 secret
