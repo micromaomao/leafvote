@@ -29,6 +29,7 @@ body
     flex-wrap: nowrap
     justify-content: flex-start
     align-items: center
+    transition: background-color 200ms
 
     .logo
       flex-grow: 0
@@ -46,6 +47,15 @@ body
       padding: 0 0.5rem
       color: $color-secondary-text
 
+    &.presenting
+      background-color: darken($color-blue, 15%)
+      border-bottom: none
+      color: white !important
+      *
+        color: white !important
+        *
+          color: white !important
+
     .connection
       flex-shrink: 0
       flex-grow: 0
@@ -59,7 +69,7 @@ body
 
     .id
       padding: 0 0.5rem
-    .logout
+    .logout, .exitpresentation
       padding: 0 0.5rem
       color: $color-accent
       cursor: pointer
@@ -72,6 +82,7 @@ body
     overflow: auto
     padding-top: 1rem
     padding-bottom: 6rem
+    transition: background-color 200ms
   .view.login
     text-align: center
     h1
@@ -303,3 +314,55 @@ body
           color: $color-secondary-text
         .option
           opacity: 0.6
+
+  .view.presentation
+    flex-grow: 1
+    background-color: $color-blue
+    color: white
+    display: flex
+    flex-direction: column
+    flex-wrap: nowrap
+    text-align: center
+    align-content: center
+
+    .label
+      margin-top: auto
+      font-size: 3rem
+    .loading
+      margin-top: auto
+      margin-bottom: auto
+      font-size: 1rem
+      color: rgba(white, 0.8)
+    .nonactive, .instructions
+      margin-top: 1rem
+      font-size: 1.2rem
+    .nonactive
+      background-color: white
+      color: $color-blue
+      padding: 1rem
+    .instructions
+      max-width: 1200px
+      margin-left: auto
+      margin-right: auto
+      p
+        margin: 0
+        padding: 0.3rem
+      .url
+        font-family: monospace
+        font-size: 120%
+    .chart
+      margin-top: auto
+      position: relative
+      overflow: hidden
+      margin: auto
+      *
+        position: absolute
+      .label
+        font-size: 1.3rem
+        text-align: right
+      .fill
+        background-color: rgba(white, 0.8)
+      .value
+        font-size: 1rem
+        text-align: left
+        padding: 0 0 0 10px

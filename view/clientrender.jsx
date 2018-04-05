@@ -83,7 +83,8 @@ class LeafVote extends React.Component {
       pollsError: null,
       selectingVoterImport: null,
       pendingVote: {},
-      votingErrors: {}
+      votingErrors: {},
+      presentingPoll: null
     }
     this.messageCallbacks = []
     this.messageId = 0
@@ -95,6 +96,7 @@ class LeafVote extends React.Component {
     this.handleLogout = this.handleLogout.bind(this)
     this.handlePollCreate = this.handlePollCreate.bind(this)
     this.reloadPolls = this.reloadPolls.bind(this)
+    this.handleExitPresentation = this.handleExitPresentation.bind(this)
   }
 
   initSocket () {
@@ -118,6 +120,15 @@ class LeafVote extends React.Component {
           this.sendMessage({type: 'login', secret: this.state.login.secret, role: this.state.login.type}).then(res => {
             if (res.error) {
               this.handleLogout()
+            }
+            if (this.state.presentingPoll) {
+              this.sendMessage({type: 'poll-subscribe', id: this.state.presentingPoll.poll._id}).then(res => {
+                if (res.error) {
+                  this.handleExitPresentation()
+                }
+              }, err => {
+                this.handleExitPresentation()
+              })
             }
           }, err => {
             this.handleLogout()
@@ -163,6 +174,12 @@ class LeafVote extends React.Component {
                 polls: pollsData
               })
               this.flushVotes()
+            }
+          } else if (msg.type === 'presentationPush') {
+            let pollId = msg.meta._id
+            if (this.state.presentingPoll && this.state.presentingPoll.poll._id === pollId) {
+              this.state.presentingPoll.data = msg
+              this.forceUpdate()
             }
           }
           return
@@ -227,14 +244,20 @@ class LeafVote extends React.Component {
   render () {
     return (
       <div className='leafvote'>
-        <div className='topbar'>
+        <div className={'topbar' + (this.state.presentingPoll ? ' presenting' : '')}>
           <div className='logo'>
             <b>Leaf</b>Vote
           </div>
           <div className='dash'>&mdash;</div>
           {this.getConnectionStatusUI()}
-          {this.getLoggedInAs()}
-          {this.state.login ? <div className='logout' onClick={this.handleLogout}>Log out</div> : null}
+          {this.state.presentingPoll === null ? [
+            this.getLoggedInAs(),
+            this.state.login ? <div className='logout' onClick={this.handleLogout}>Log out</div> : null
+          ] : [
+            <div className='exitpresentation' onClick={this.handleExitPresentation}>
+              Exit presentation
+            </div>
+          ]}
         </div>
         {this.state.login === null ? (
           <div className='view login'>
@@ -289,8 +312,8 @@ class LeafVote extends React.Component {
             })()}
           </div>
         ) : null}
-        {this.state.login && this.state.login.type === 'manager' ? (
-          <div className='view manager'>
+        {this.state.login && this.state.login.type === 'manager' && !this.state.presentingPoll ? (
+          <div className='view manager' key='view-manager'>
             {this.state.pollCreation && this.state.pollCreation.loading ? (
               <div className='createpoll'>Creating</div>) : (
                 this.state.selectingVoterImport ? null : (<div className='createpoll' onClick={this.handlePollCreate}>Create New Poll</div>)
@@ -364,6 +387,9 @@ class LeafVote extends React.Component {
                             Close poll
                           </div>
                         )}
+                        <div className='btn' onClick={evt => this.handlePresentPoll(poll)}>
+                          Present
+                        </div>
                       </div>
                     ) : (
                       <div className='bottom'>
@@ -465,6 +491,120 @@ class LeafVote extends React.Component {
             }) : null}
           </div>
         ) : null}
+        {this.state.presentingPoll !== null ? (
+          <div className='view presentation' key='view-manager'>
+            <div className='label'>
+              {this.state.presentingPoll.data ? this.state.presentingPoll.data.meta.label : this.state.presentingPoll.poll.label}
+            </div>
+            {(data => {
+              if (!data) {
+                return (
+                  <div className='loading'>
+                    Awaiting information from server.
+                  </div>
+                )
+              }
+              return [
+                data.meta.active ? (
+                  <div className='instructions' key={0}>
+                    <b>Voting Instructions</b>
+                    <p>
+                      You should have received a voting ticket with a QR code on it. Scan the code to login.
+                      If you are unable to scan, visit the following website and enter the secret shown on the paper.
+                    </p>
+                    <div className='url'>
+                      {window.location.hostname}
+                    </div>
+                  </div>
+                ) : (
+                  <div className='nonactive' key={0}>
+                    The poll is currently closed, which means nobody can vote.
+                  </div>
+                ),
+                this.makeChart(data, 1)
+              ]
+            })(this.state.presentingPoll.data)}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  makeChart (data, key) {
+    if (!data || !data.results) return null
+    let results = data.results
+    let options = data.meta.options
+    let cWidth = window.innerWidth * 0.8
+    const hSpace = 60
+    let cHeight = options.length * hSpace
+    let xBarStart = 200
+    let dataMax = 0
+    let sum = 0
+    for (let r of results) {
+      if (r.count > dataMax) dataMax = r.count
+      sum += r.count
+    }
+    dataMax = Math.max(dataMax, 10)
+    dataMax += Math.sqrt(dataMax)
+    const rightMargin = 100
+    let xScale = (cWidth - xBarStart - rightMargin) / dataMax
+    const hBar = 20
+    let optCounts = {}
+    for (let o of options) {
+      optCounts[o] = 0
+    }
+    for (let r of results) {
+      optCounts[r.candidate] = r.count
+    }
+    return (
+      <div className='chart' key={key} style={{
+        width: cWidth + 'px',
+        height: cHeight + 'px'
+      }}>
+        {options.map((opt, optI) => {
+          let sY = optI * hSpace
+          let barWidth = optCounts[opt] * xScale
+          return [
+            <div className='label' key={opt + '_label'} style={{
+              top: sY + 'px',
+              left: '0',
+              width: (xBarStart - 20) + 'px',
+              height: hSpace + 'px',
+              lineHeight: hSpace + 'px'
+            }}>
+              {opt}
+            </div>,
+            <div className='bar' key={opt + '_bar'} style={{
+              top: (sY + hSpace/2 - hBar/2) + 'px',
+              left: xBarStart + 'px',
+              height: hBar + 'px',
+              width: barWidth + 'px',
+              backgroundColor: '#fff'
+            }} />,
+            <div className='value' key={opt + '_value'} style={{
+              top: sY + 'px',
+              left: (xBarStart + barWidth) + 'px',
+              right: '0',
+              height: hSpace + 'px',
+              lineHeight: hSpace + 'px'
+            }}>{optCounts[opt]}</div>
+          ]
+        })}
+        <div className='fill' key={'leftline'} style={{
+          top: '0',
+          height: cHeight + 'px',
+          left: (xBarStart - 1) + 'px',
+          width: '1px'
+        }} />
+        <div className='fill' key={'halfline'} style={{
+          top: '0',
+          height: cHeight + 'px',
+          left: (xBarStart + (sum / 2) * xScale) + 'px',
+          width: '0',
+          opacity: 0.5,
+          backgroundColor: 'transparent',
+          borderRight: 'dashed 1px white'
+        }} />
       </div>
     )
   }
@@ -891,6 +1031,23 @@ class LeafVote extends React.Component {
         this.flushVotes()
       })
     }
+  }
+
+  handlePresentPoll (poll) {
+    this.setState({
+      presentingPoll: {
+        poll,
+        data: null
+      }
+    })
+    this.sendMessage({type: 'poll-subscribe', id: poll._id})
+  }
+
+  handleExitPresentation () {
+    this.setState({
+      presentingPoll: null
+    })
+    this.sendMessage({type: 'poll-unsubscribe'})
   }
 }
 

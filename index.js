@@ -40,6 +40,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
       let authType = null
       let authVoterSecret = null
       let voterPushInterval = null
+      let presentationPushInterval = null
       function voterInfoPush () {
         if (closed) {
           if (voterPushInterval !== null) {
@@ -402,7 +403,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               return void reply({error: 'Need to be logged in as voter.'})
             }
             if (typeof obj.option !== 'string') return void reply({error: 'Need "option" to be a string.'})
-            Poll.findOne({_id: obj.pollId, voters: authVoterSecret}).then(poll => {
+            Poll.findOne({_id: obj.pollId, voters: authVoterSecret, active: true}).then(poll => {
               if (!poll) return void reply({error: "Either no such poll, or you don't have the permission to vote."})
               Vote.update({pollId: poll._id, doneBy: authVoterSecret}, {$set: {votedFor: obj.option}, $setOnInsert: {valid: true}}, {multi: false, upsert: true}).then(() => {
                 return void reply({})
@@ -412,6 +413,83 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             }, err => {
               return void reply({error: err.message})
             })
+          } else if (obj.type === 'poll-subscribe') {
+            if (authType !== 'manager' || !authIdDoc) {
+              return void reply({error: 'Need to be logged in as manager.'})
+            }
+            Poll.findOne({_id: obj.id}).then(poll => {
+              if (poll.manager.equals(authIdDoc._id)) {
+                if (presentationPushInterval !== null) {
+                  clearInterval(presentationPushInterval)
+                  presentationPushInterval = null
+                }
+                presentationPushInterval = setInterval(function () {
+                  if (closed) {
+                    if (presentationPushInterval !== null) {
+                      clearInterval(presentationPushInterval)
+                      presentationPushInterval = null
+                    }
+                    return
+                  }
+                  if (authType !== 'manager' || authIdDoc === null) return
+                  function send (obj) {
+                    if (closed) return
+                    try {
+                      ws.send(JSON.stringify(Object.assign(obj, {
+                        _id: null,
+                        type: 'presentationPush'
+                      })))
+                    } catch (e) {
+                      try {
+                        ws.close(0)
+                        closed = true
+                      } catch (e) {}
+                    }
+                  }
+                  Poll.findOne({_id: poll._id}, {active: true, options: true, label: true}).then(poll => {
+                    if (!poll) return void send({error: 'Poll no longer existed.'})
+                    Vote.aggregate([
+                      {$match: {
+                        pollId: poll._id,
+                        valid: true
+                      }},
+                      {$group: {
+                        _id: '$votedFor',
+                        count: {$sum: 1}
+                      }},
+                      {$sort: {
+                        _id: 1
+                      }}
+                    ]).then(results => {
+                      /* function rand () {
+                        return Math.ceil(Math.sqrt(Math.random() * 10000))
+                      }
+                      return void send({
+                        meta: poll,
+                        results: [{candidate:"Blablablabla", count:30}, {candidate:"Cand A", count:0}, {candidate:"Cand Bbbb", count:0}, {candidate:"Cand C", count:20}]
+                      }) */
+                      send({
+                        meta: poll,
+                        results: results.map(x => ({candidate: x._id, count: x.count}))
+                      })
+                    })
+                  }, err => {
+                    send({error: err.message})
+                  })
+                }, 500)
+                return void reply({})
+              } else {
+                return void reply({error: 'Permission denied.'})
+              }
+            }, err => {
+              return void reply({error: err.message})
+            })
+          } else if (obj.type === 'poll-unsubscribe') {
+            if (presentationPushInterval !== null) {
+              clearInterval(presentationPushInterval)
+              presentationPushInterval = null
+            }
+            return void reply({})
           } else {
             throw new Error(`Invalid message type ${obj.type}`)
           }
@@ -424,6 +502,10 @@ module.exports = ({mongodb: db, addWSHandler}) => {
         if (voterPushInterval !== null) {
           clearInterval(voterPushInterval)
           voterPushInterval = null
+        }
+        if (presentationPushInterval !== null) {
+          clearInterval(presentationPushInterval)
+          presentationPushInterval = null
         }
       })
     }
