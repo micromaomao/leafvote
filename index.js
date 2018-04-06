@@ -133,6 +133,8 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                 } else {
                   reply({error: "Double check your secret."})
                 }
+              }, err => {
+                reply({error: err.message})
               })
             } else if (obj.role === 'manager') {
               Manager.findOne({secret}).then(manager => {
@@ -159,13 +161,11 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               let m = new Manager({
                 secret
               })
-              m.save().then(() => {
-                authType = 'manager'
-                authIdDoc = m
-                reply({secret: secret.toString('base64')})
-              }, err => {
-                reply({error: err.message})
-              })
+              return m.save()
+            }).then(() => {
+              authType = 'manager'
+              authIdDoc = m
+              reply({secret: secret.toString('base64')})
             }, err => {
               reply({error: err.message})
             })
