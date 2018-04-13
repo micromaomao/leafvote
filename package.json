@@ -47,7 +47,8 @@
     "style-loader": "^0.20.3",
     "supertest": "^3.0.0",
     "webpack": "^4.1.1",
-    "webpack-cli": "^2.0.12"
+    "webpack-cli": "^2.0.12",
+    "ws": "^5.1.1"
   },
   "peerDependencies": {
     "express": ">=4.0.0",
