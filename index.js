@@ -104,7 +104,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
           closed = true
           return
         }
-        if (!Number.isSafeInteger(obj._id)) obj._id = null
+        if (!Number.isSafeInteger(obj._id) && typeof obj._id !== 'string') obj._id = null
         function reply (ct) {
           try {
             ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
