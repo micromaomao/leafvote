@@ -79,7 +79,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             }))
           } catch (e) {
             try {
-              ws.close(0)
+              ws.close(1013)
               closed = true
             } catch (e) {}
           }
@@ -91,7 +91,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
       ws.on('message', function (msg) {
         if (closed) return
         if (typeof msg !== 'string') {
-          ws.close(1, 'Invalid message, should be UTF-8 string.')
+          ws.close(1003, 'Invalid message, should be UTF-8 string.')
           closed = true
           return
         }
@@ -100,7 +100,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
           obj = JSON.parse(msg)
           if (typeof obj !== 'object' || Array.isArray(obj)) throw new Error()
         } catch (e) {
-          ws.close(1, 'Invalid JSON.')
+          ws.close(1007, 'Invalid JSON.')
           closed = true
           return
         }
@@ -110,7 +110,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
             ws.send(JSON.stringify(Object.assign(ct, {_id: obj._id})))
           } catch (e) {
             try {
-              ws.close(0)
+              ws.close(1013)
               closed = true
             } catch (e) {}
           }
@@ -439,7 +439,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
                       })))
                     } catch (e) {
                       try {
-                        ws.close(0)
+                        ws.close(1013)
                         closed = true
                       } catch (e) {}
                     }
