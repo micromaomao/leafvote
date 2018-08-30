@@ -35,7 +35,7 @@
     "fetch-polyfill": "^0.8.2",
     "html-webpack-plugin": "^3.2.0",
     "mocha": "^5.2.0",
-    "mongoose": "^5.2.8",
+    "mongoose": "^5.2.10",
     "node-sass": "^4.9.3",
     "pug": "^2.0.3",
     "pug-loader": "^2.4.0",
@@ -44,11 +44,11 @@
     "react-dom": "^16.4.2",
     "sass-loader": "^7.1.0",
     "should": "^13.2.3",
-    "style-loader": "^0.22.1",
+    "style-loader": "^0.23.0",
     "supertest": "^3.1.0",
-    "webpack": "^4.16.5",
+    "webpack": "^4.17.1",
     "webpack-cli": "^3.1.0",
-    "ws": "^5.2.2"
+    "ws": "^6.0.0"
   },
   "peerDependencies": {
     "express": ">=4.0.0",

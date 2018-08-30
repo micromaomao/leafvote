@@ -156,7 +156,6 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               throw new Error(`Invalid role ${obj.role}`)
             }
           } else if (obj.type === 'register') {
-            return void reply({error: 'This is currently a private server unavailable for public use. Sorry about that\u2026 If you want to use LeafVote, run it on your own server.'})
             GetSecret().then(secret => {
               let m = new Manager({
                 secret
