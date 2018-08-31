@@ -160,13 +160,13 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               let m = new Manager({
                 secret
               })
-              return m.save()
-            }).then(() => {
-              authType = 'manager'
-              authIdDoc = m
-              reply({secret: secret.toString('base64')})
-            }, err => {
-              reply({error: err.message})
+              return m.save().then(() => {
+                authType = 'manager'
+                authIdDoc = m
+                reply({secret: secret.toString('base64')})
+              }, err => {
+                reply({error: err.message})
+              })
             })
           } else if (obj.type === 'listPoll') {
             if (authType !== 'manager' || !authIdDoc) {
