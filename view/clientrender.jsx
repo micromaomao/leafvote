@@ -137,7 +137,7 @@ class LeafVote extends React.Component {
               }
               resolve()
             }, err => {
-              this.soekctTerminateWithError(err)
+              this.socketTerminateWithError(err)
             })
           } else {
             resolve()
