@@ -73,6 +73,9 @@ body
       padding: 0 0.5rem
       color: $color-accent
       cursor: pointer
+    .showonly3
+      cursor: pointer
+      margin-right: 1rem
 
   .view
     flex-grow: 0
@@ -366,3 +369,54 @@ body
         font-size: 1rem
         text-align: left
         padding: 0 0 0 10px
+  .view.presentation2
+    flex-grow: 1
+    background-color: $color-blue
+    color: white
+    display: flex
+    flex-direction: column
+    flex-wrap: nowrap
+    text-align: left
+    align-content: flex-start
+
+    .label
+      text-align: center
+      padding: 0.5rem
+      .title
+        font-size: 1.5rem
+      .desc
+        font-size: 1rem
+
+    .results
+      .candidate
+        margin-bottom: 1rem
+        .nameline
+          width: 90%
+          display: flex
+          flex-direction: row
+          flex-wrap: nowrap
+          align-items: center
+          .name
+            flex-grow: 1
+            flex-shrink: 1
+            font-size: 2rem
+          .count
+            flex-grow: 0
+            flex-shrink: 0
+            text-align: right
+            font-size: 1.5rem
+        .bar
+          width: 90%
+          height: 15px
+          .fill
+            height: 100%
+            background-color: white
+            margin: 0
+            padding: 0
+        .nameline, .bar
+          margin-left: auto
+          margin-right: auto
+    .showingonly3
+      font-size: 1rem
+      text-align: center
+      padding: 1rem

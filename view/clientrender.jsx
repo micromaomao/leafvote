@@ -100,6 +100,7 @@ class LeafVote extends React.Component {
     this.handlePollCreate = this.handlePollCreate.bind(this)
     this.reloadPolls = this.reloadPolls.bind(this)
     this.handleExitPresentation = this.handleExitPresentation.bind(this)
+    this.handlePresentationShowOnly3 = this.handlePresentationShowOnly3.bind(this)
   }
 
   initSocket () {
@@ -136,8 +137,7 @@ class LeafVote extends React.Component {
               }
               resolve()
             }, err => {
-              this.handleLogout()
-              resolve()
+              this.soekctTerminateWithError(err)
             })
           } else {
             resolve()
@@ -147,13 +147,7 @@ class LeafVote extends React.Component {
         socket.addEventListener('error', evt => {
           let socketError = evt.error
           if (!socketError) socketError = new Error('Network error')
-          this.setState({socketState: 'disconnected', socketError, socket: null})
-          try {
-            socket.close(0, 'error occured.')
-          } catch (e) {}
-          setTimeout(() => {
-            this.initSocket()
-          }, 100)
+          this.socketTerminateWithError(socketError)
           errored = true
         })
         socket.addEventListener('close', evt => {
@@ -187,6 +181,7 @@ class LeafVote extends React.Component {
               let pollId = msg.meta._id
               if (this.state.presentingPoll && this.state.presentingPoll.poll._id === pollId) {
                 this.state.presentingPoll.data = msg
+                this.state.presentingPoll.lastReceive = Date.now()
                 this.forceUpdate()
               }
             }
@@ -205,6 +200,17 @@ class LeafVote extends React.Component {
     })
   }
 
+  socketTerminateWithError (err) {
+    let socket = this.state.socket
+    this.setState({socketState: 'disconnected', socketError: err, socket: null})
+    try {
+      socket.close(0, 'error occured.')
+    } catch (e) {}
+    setTimeout(() => {
+      this.initSocket()
+    }, 100)
+  }
+
   testLatency () {
     if (this.latencySetTimeout !== null) clearTimeout(this.latencySetTimeout)
     this.latencySetTimeout = null
@@ -219,7 +225,7 @@ class LeafVote extends React.Component {
     })
   }
 
-  sendMessage (msg, callback) {
+  sendMessage (msg) {
     return new Promise((resolve, reject) => {
       if (!this.state.socket) {
         reject(new Error('Offline.'))
@@ -279,9 +285,16 @@ class LeafVote extends React.Component {
             this.getLoggedInAs(),
             this.state.login ? <div className='logout' onClick={this.handleLogout}>Log out</div> : null
           ] : [
-            <div className='exitpresentation' onClick={this.handleExitPresentation}>
-              Exit presentation
-            </div>
+            (this.state.presentingPoll.style === 2 ? (
+              <div className='showonly3' onClick={this.handlePresentationShowOnly3}>
+                Show only 3
+              </div>
+            ) : null),
+            (
+              <div className='exitpresentation' onClick={this.handleExitPresentation}>
+                Exit presentation
+              </div>
+            )
           ]}
         </div>
         {this.state.login === null && !this.state.secretUrl ? (
@@ -356,7 +369,7 @@ class LeafVote extends React.Component {
               <div className='empty'>No polls created.</div>
             ) : (
               this.state.pollsError ? <div className='pollsListError'>{this.state.pollsError.message}</div> : (
-                this.state.polls === null ?  <div className='loading'>Loading your polls&hellip;</div> : null
+                this.state.polls === null ? <div className='loading'>Loading your polls&hellip;</div> : null
               )
             )}
             {this.state.pollActionError ? <div className='pollsListError'>{this.state.pollActionError.message}</div> : null}
@@ -420,6 +433,9 @@ class LeafVote extends React.Component {
                         <div className='btn' onClick={evt => this.handlePresentPoll(poll)}>
                           Present
                         </div>
+                        <div className='btn' onClick={evt => this.handlePresentPoll(poll, 2)}>
+                            Present (2)
+                      </div>
                       </div>
                     ) : (
                       <div className='bottom'>
@@ -524,43 +540,98 @@ class LeafVote extends React.Component {
             }) : null}
           </div>
         ) : null}
-        {this.state.presentingPoll !== null ? (
-          <div className='view presentation' key='view-manager'>
-            <div className='label'>
-              {this.state.presentingPoll.data ? this.state.presentingPoll.data.meta.label : this.state.presentingPoll.poll.label}
-            </div>
-            {(data => {
-              if (!data) {
-                return (
-                  <div className='loading'>
-                    Awaiting information from server.
-                  </div>
-                )
-              }
-              return [
-                data.meta.active ? (
-                  <div className='instructions' key={0}>
-                    <b>Voting Instructions</b>
-                    <p>
-                      You should have received a voting ticket with a QR code on it. Scan the code to login.
-                      If you are unable to scan, visit the following website and enter the secret shown on the paper.
-                    </p>
-                    <div className='url'>
-                      {window.location.hostname}
-                    </div>
-                  </div>
-                ) : (
-                  <div className='nonactive' key={0}>
-                    The poll is currently closed, which means nobody can vote.
-                  </div>
-                ),
-                this.makeChart(data, 1)
-              ]
-            })(this.state.presentingPoll.data)}
-          </div>
-        ) : null}
+        {this.state.presentingPoll !== null ? this.getPresentRender() : null}
       </div>
     )
+  }
+
+  getPresentRender () {
+    if (this.state.presentingPoll === null) return null
+    let presentingPoll = this.state.presentingPoll
+    if (presentingPoll.style === 1) {
+      return (
+        <div className='view presentation' key='view-manager'>
+          <div className='label'>
+          {presentingPoll.data ? presentingPoll.data.meta.label : presentingPoll.poll.label}
+          </div>
+          {(data => {
+            if (!data) {
+              return (
+                <div className='loading'>
+                  Awaiting information from server.
+                </div>
+              )
+            }
+            return [
+              data.meta.active ? (
+                <div className='instructions' key={0}>
+                  <b>Voting Instructions</b>
+                  <p>
+                    You should have received a voting ticket with a QR code on it. Scan the code to login.
+                    If you are unable to scan, visit the following website and enter the secret shown on the paper.
+                  </p>
+                  <div className='url'>
+                    {window.location.hostname}
+                  </div>
+                </div>
+              ) : (
+                <div className='nonactive' key={0}>
+                  The poll is currently closed, which means nobody can vote.
+                </div>
+              ),
+              this.makeChart(data, 1)
+            ]
+          })(presentingPoll.data)}
+        </div>
+      )
+    } else if (presentingPoll.style === 2) {
+      let maxVote = null
+      return (
+        <div className='view presentation2' key='view-manager'>
+          <div className='label'>
+            <div className='title'>{presentingPoll.data ? presentingPoll.data.meta.label : presentingPoll.poll.label}</div>
+            {presentingPoll.data ? (
+              <div className='desc'>{presentingPoll.data.results.length} / {presentingPoll.poll.options.length} candidate received votes.</div>
+            ) : (
+              <div className='desc'>Awaiting information from server.</div>
+            )}
+          </div>
+          <div className='results'>
+            {presentingPoll.data && presentingPoll.data.results ? (
+              presentingPoll.data.results.sort((a, b) => Math.sign(b.count - a.count)).map((item, i) => {
+                if (i >= 3 && presentingPoll.showOnly3) {
+                  return null
+                }
+                if (maxVote == null) maxVote = item.count
+                return (
+                  <div className='candidate' key={item.candidate}>
+                    <div className='nameline'>
+                      <div className='name'>{item.candidate}</div>
+                      <div className='count'>{item.count}</div>
+                    </div>
+                    <div className='bar'>
+                      <div className='fill' style={{width: ((item.count / maxVote) * 100) + '%'}} />
+                    </div>
+                  </div>
+                )
+              })
+            ) : null}
+            {presentingPoll.data && presentingPoll.data.results &&
+              presentingPoll.data.results.length > 3 && presentingPoll.showOnly3 ? (
+              <div className='showingonly3'>The rest {presentingPoll.data.results.length - 3} omitted.</div>
+            ) : null}
+          </div>
+        </div>
+      )
+    }
+  }
+
+  handlePresentationShowOnly3 () {
+    let presentingPoll = this.state.presentingPoll
+    if (presentingPoll && presentingPoll.style === 2) {
+      presentingPoll.showOnly3 = !presentingPoll.showOnly3
+      this.forceUpdate()
+    }
   }
 
   makeChart (data, key) {
@@ -693,6 +764,20 @@ class LeafVote extends React.Component {
       return <div className='connection disconnected'>Connecting</div>
     }
     if (this.state.socketState === 'ready') {
+      if (this.state.presentingPoll && this.state.presentingPoll.lastReceive) {
+        let lastReceiveSec = Math.round((Date.now() - this.state.presentingPoll.lastReceive) / 100) / 10
+        if (this.connectionStatusUpdateTimeout) clearTimeout(this.connectionStatusUpdateTimeout)
+        if (lastReceiveSec >= 5) {
+          if (this.state.socket && this.state.socket.readyState == 1) {
+            this.socketTerminateWithError(new Error('long time no data from server'))
+          }
+        } else {
+          this.connectionStatusUpdateTimeout = setTimeout(() => {
+            this.forceUpdate()
+          }, 100);
+        }
+        return <div className='connection ready'>Last update: {lastReceiveSec}s ago</div>
+      }
       return <div className='connection ready'>{this.state.latency || '✓'}</div>
     }
     return <div className='connection'>{this.state.socketState}</div>
@@ -733,7 +818,8 @@ class LeafVote extends React.Component {
   handleLogout (evt) {
     this.setState({
       login: null,
-      loginning: null
+      loginning: null,
+      presentingPoll: null
     })
   }
 
@@ -1068,11 +1154,12 @@ class LeafVote extends React.Component {
     }
   }
 
-  handlePresentPoll (poll) {
+  handlePresentPoll (poll, style = 1) {
     this.setState({
       presentingPoll: {
         poll,
-        data: null
+        data: null,
+        style
       }
     })
     this.sendMessage({type: 'poll-subscribe', id: poll._id})
