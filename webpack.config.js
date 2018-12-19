@@ -14,8 +14,8 @@ baseConfig = {
           {
             loader: 'babel-loader',
             options: {
-              presets: ['env'],
-              plugins: ['transform-react-jsx']
+              presets: ['@babel/preset-env'],
+              plugins: ['@babel/plugin-transform-react-jsx']
             }
           }
         ]
@@ -26,7 +26,7 @@ baseConfig = {
           {
             loader: 'babel-loader',
             options: {
-              presets: ['env']
+              presets: ['@babel/preset-env'],
             }
           }
         ]

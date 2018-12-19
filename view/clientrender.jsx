@@ -1,6 +1,6 @@
 'use strict'
 
-require('babel-polyfill')
+require('@babel/polyfill')
 require('fetch-polyfill')
 
 const React = require('react')
