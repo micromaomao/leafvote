@@ -1189,6 +1189,7 @@ class LeafVote extends React.Component {
     if (this.presentationPushTimeout) clearTimeout(this.presentationPushTimeout)
     this.presentationPushTimeout = setTimeout(() => {
       this.presentationPushTimeout = null
+      if (!this.state.presentingPoll) return
       this.socketTerminateWithError(new Error('long time no data from server'))
     }, 5000)
   }
