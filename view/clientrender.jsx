@@ -100,7 +100,7 @@ class LeafVote extends React.Component {
     this.handlePollCreate = this.handlePollCreate.bind(this)
     this.reloadPolls = this.reloadPolls.bind(this)
     this.handleExitPresentation = this.handleExitPresentation.bind(this)
-    this.handlePresentationShowOnly3 = this.handlePresentationShowOnly3.bind(this)
+    this.handleShowOnlyN = this.handleShowOnlyN.bind(this)
   }
 
   initSocket () {
@@ -286,8 +286,8 @@ class LeafVote extends React.Component {
             this.state.login ? <div className='logout' onClick={this.handleLogout}>Log out</div> : null
           ] : [
             (this.state.presentingPoll.style === 2 ? (
-              <div className='showonly3' onClick={this.handlePresentationShowOnly3}>
-                Show only 3
+              <div className='showonly3' onClick={this.handleShowOnlyN}>
+                Show only 1
               </div>
             ) : null),
             (
@@ -599,7 +599,7 @@ class LeafVote extends React.Component {
           <div className='results'>
             {presentingPoll.data && presentingPoll.data.results ? (
               presentingPoll.data.results.sort((a, b) => Math.sign(b.count - a.count)).map((item, i) => {
-                if (i >= 3 && presentingPoll.showOnly3) {
+                if (i >= 1 && presentingPoll.showOnlyN) {
                   return null
                 }
                 if (maxVote == null) maxVote = item.count
@@ -617,8 +617,8 @@ class LeafVote extends React.Component {
               })
             ) : null}
             {presentingPoll.data && presentingPoll.data.results &&
-              presentingPoll.data.results.length > 3 && presentingPoll.showOnly3 ? (
-              <div className='showingonly3'>The rest {presentingPoll.data.results.length - 3} omitted.</div>
+              presentingPoll.data.results.length > 3 && presentingPoll.showOnlyN ? (
+              <div className='showingonly3'>The rest {presentingPoll.data.results.length - 1} omitted.</div>
             ) : null}
           </div>
         </div>
@@ -626,10 +626,10 @@ class LeafVote extends React.Component {
     }
   }
 
-  handlePresentationShowOnly3 () {
+  handleShowOnlyN () {
     let presentingPoll = this.state.presentingPoll
     if (presentingPoll && presentingPoll.style === 2) {
-      presentingPoll.showOnly3 = !presentingPoll.showOnly3
+      presentingPoll.showOnlyN = !presentingPoll.showOnlyN
       this.forceUpdate()
     }
   }
