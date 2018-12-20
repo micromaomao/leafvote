@@ -104,10 +104,13 @@ class LeafVote extends React.Component {
   }
 
   initSocket () {
-    return new Promise((resolve, reject) => {
+    if (this.socketIniting) return this.socketIniting
+    this.socketIniting = new Promise((resolve, reject) => {
+      console.log('initSocket')
       if (this.state.socket) {
         if (this.state.socket.readyState === WebSocket.OPEN) return void resolve()
       }
+      this.setState({socketState: 'disconnected'})
       for (let msgCb of this.messageCallbacks) {
         try {
           msgCb(new Error('disconnected'), null)
@@ -118,6 +121,7 @@ class LeafVote extends React.Component {
         let socket = new WebSocket('wss://leafvote.mww.moe')
         this.setState({socket})
         socket.addEventListener('open', evt => {
+          console.log('Socket ready')
           this.setState({socketState: 'ready', socketError: null})
           if (this.latencySetTimeout !== null) clearTimeout(this.latencySetTimeout)
           this.testLatency()
@@ -135,9 +139,12 @@ class LeafVote extends React.Component {
                   this.handleExitPresentation()
                 })
               }
+              console.log('Socket login ok')
               resolve()
             }, err => {
               this.socketTerminateWithError(err)
+              console.log('Socket login not ok')
+              reject(err)
             })
           } else {
             resolve()
@@ -145,12 +152,19 @@ class LeafVote extends React.Component {
         })
         let errored = false
         socket.addEventListener('error', evt => {
+          console.log('Socket error')
           let socketError = evt.error
           if (!socketError) socketError = new Error('Network error')
-          this.socketTerminateWithError(socketError)
+          reject(socketError)
+          if (this.state.socketState === 'ready') {
+            this.socketTerminateWithError(socketError)
+          } else {
+            setTimeout(() => this.initSocket(), 100)
+          }
           errored = true
         })
         socket.addEventListener('close', evt => {
+          console.log('Socket close')
           if (errored) return
           this.setState({socketState: 'disconnected'})
           this.initSocket()
@@ -182,6 +196,7 @@ class LeafVote extends React.Component {
               if (this.state.presentingPoll && this.state.presentingPoll.poll._id === pollId) {
                 this.state.presentingPoll.data = msg
                 this.state.presentingPoll.lastReceive = Date.now()
+                this.setPresentationPushTimeoutChecker()
                 this.forceUpdate()
               }
             }
@@ -197,10 +212,14 @@ class LeafVote extends React.Component {
         setTimeout(() => this.initSocket(), 1000)
         reject()
       }
+    }).finally(() => {
+      this.socketIniting = null
     })
+    return this.socketIniting
   }
 
   socketTerminateWithError (err) {
+    if (this.state.socketState !== 'ready') return
     let socket = this.state.socket
     this.setState({socketState: 'disconnected', socketError: err, socket: null})
     try {
@@ -766,21 +785,21 @@ class LeafVote extends React.Component {
     if (this.state.socketState === 'ready') {
       if (this.state.presentingPoll && this.state.presentingPoll.lastReceive) {
         let lastReceiveSec = Math.round((Date.now() - this.state.presentingPoll.lastReceive) / 100) / 10
-        if (this.connectionStatusUpdateTimeout) clearTimeout(this.connectionStatusUpdateTimeout)
-        if (lastReceiveSec >= 5) {
-          if (this.state.socket && this.state.socket.readyState == 1) {
-            this.socketTerminateWithError(new Error('long time no data from server'))
-          }
-        } else {
-          this.connectionStatusUpdateTimeout = setTimeout(() => {
-            this.forceUpdate()
-          }, 100);
-        }
+        this.updateLater()
         return <div className='connection ready'>Last update: {lastReceiveSec}s ago</div>
       }
       return <div className='connection ready'>{this.state.latency || '✓'}</div>
     }
     return <div className='connection'>{this.state.socketState}</div>
+  }
+
+  updateLater () {
+    if (!this.updateLaterTimeout) {
+      this.updateLaterTimeout = setTimeout(() => {
+        this.updateLaterTimeout = null
+        this.forceUpdate()
+      }, 100)
+    }
   }
 
   getLoggedInAs () {
@@ -1163,6 +1182,15 @@ class LeafVote extends React.Component {
       }
     })
     this.sendMessage({type: 'poll-subscribe', id: poll._id})
+    this.setPresentationPushTimeoutChecker()
+  }
+
+  setPresentationPushTimeoutChecker () {
+    if (this.presentationPushTimeout) clearTimeout(this.presentationPushTimeout)
+    this.presentationPushTimeout = setTimeout(() => {
+      this.presentationPushTimeout = null
+      this.socketTerminateWithError(new Error('long time no data from server'))
+    }, 5000)
   }
 
   handleExitPresentation () {
