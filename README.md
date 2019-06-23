@@ -10,7 +10,7 @@
 
 ### Demos
 
-Voting ticket (one for each voter) generation: Export voting ticket tex -> latex & dvipdf (pdflatex is not supported because PSTricks)
+Voting ticket: (now support online generation, no need to run tex anymore!) \
 ![gif demo](demo-voting-ticket.gif)
 
 Vote & presentation interface: \
