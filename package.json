@@ -53,5 +53,8 @@
   "peerDependencies": {
     "express": ">=4.0.0",
     "mongoose": ">=4.0.0"
+  },
+  "dependencies": {
+    "procschd": "^0.1.0"
   }
 }

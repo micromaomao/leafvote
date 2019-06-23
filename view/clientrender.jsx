@@ -101,6 +101,7 @@ class LeafVote extends React.Component {
     this.reloadPolls = this.reloadPolls.bind(this)
     this.handleExitPresentation = this.handleExitPresentation.bind(this)
     this.handleShowOnlyN = this.handleShowOnlyN.bind(this)
+    this.handlePrintTickets = this.handlePrintTickets.bind(this)
   }
 
   initSocket () {
@@ -465,9 +466,29 @@ class LeafVote extends React.Component {
                           <div key={2} className='btn' onClick={evt => this.handleImportVoter(poll)}>Import from poll</div>,
                           <div key={3} className='btn' onClick={evt => this.handleRemoveAllVoters(poll)}>Remove all</div>,
                           <input key={4} className='filter' type='text' placeholder='(filter)' value={poll.voters.filter || ''} onChange={evt => this.handleVoterFilterChange(poll, evt.target.value)} />,
-                          <div key={5} className='btn' onClick={evt => this.handleExportTex(poll)}>
-                            Export voting ticket tex
-                          </div>
+                          <div key={5} className={'btn' + (() => {
+                            if (poll.printVotingTicket) {
+                              if (poll.printVotingTicket.loading) {
+                                return ' disabled'
+                              } else if (poll.printVotingTicket.error) {
+                                return ' error'
+                              }
+                            }
+                            return ''
+                          })()} onClick={evt => this.handlePrintTickets(poll)}>
+                            {
+                              poll.printVotingTicket ? (
+                                poll.printVotingTicket.loading ? "Printing..." : (
+                                  poll.printVotingTicket.error ? "Error: " + poll.printVotingTicket.error : (
+                                    poll.printVotingTicket.pdfUrl ? "Open pdf" : "Print voting tickets"
+                                  )
+                                )
+                              ) : "Print voting tickets"
+                            }
+                          </div>,
+                          poll.printVotingTicket && poll.printVotingTicket.error ? (
+                            <div key={6} className='btn' onClick={evt => this.handleExportTex(poll)}>Export tex and generate pdf yourself</div>
+                          ) : null
                         ] : null}
                         {poll.voters && poll.voters.opDoing ? <div className='opDoing'>Processing&hellip;</div> : null}
                         {poll.voters && poll.voters.opError ? <div className='error'>{poll.voters.opError.message}</div> : null}
@@ -1238,6 +1259,47 @@ class LeafVote extends React.Component {
     let result = TicketTex.replace(/^\s+%%%%%%% PLACEHOLDER %%%%%%%$/m, t.replace(/^/gm, '  '))
     let url = 'data:text/plain,' + encodeURIComponent(result)
     window.open(url)
+  }
+
+  handlePrintTickets (poll) {
+    if (poll.printVotingTicket) {
+      if (!poll.printVotingTicket.loading) {
+        if (poll.printVotingTicket.pdfUrl) {
+          window.open(poll.printVotingTicket.pdfUrl)
+          poll.printVotingTicket = null
+          this.forceUpdate()
+          return
+        }
+      } else {
+        return
+      }
+    }
+    if (!poll.voters || !poll.voters.voters) return
+    let voters = poll.voters.voters.filter(x => x.indexOf(poll.voters.filter || '') >= 0)
+    let printVotingTicket = {
+      loading: true
+    }
+    poll.printVotingTicket = printVotingTicket
+    this.forceUpdate()
+    this.sendMessage({
+      type: 'printTickets',
+      voters
+    }).then(res => {
+      if (poll.printVotingTicket != printVotingTicket) return
+      printVotingTicket.loading = false
+      if (res.error) {
+        printVotingTicket.error = res.error
+        this.forceUpdate()
+        return
+      }
+      printVotingTicket.pdfUrl = res.url
+      this.forceUpdate()
+    }, err => {
+      if (poll.printVotingTicket != printVotingTicket) return
+      printVotingTicket.loading = false
+      printVotingTicket.error = err
+      this.forceUpdate()
+    })
   }
 }
 

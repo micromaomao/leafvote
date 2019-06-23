@@ -2,9 +2,25 @@ const express = require.main.require('express')
 const path = require('path')
 const fs = require('fs')
 const mongoose = require.main.require('mongoose')
+const crypto = require('crypto')
 
 let indexPath = path.join(__dirname, 'dist/index.html')
 let indexHtml = fs.readFileSync(indexPath)
+
+const procschd = require('procschd')
+let procschdServer = null
+
+if (process.env.PROCSCHD_URL) {
+  procschd.ProcschdServer.connect(process.env.PROCSCHD_URL, process.env.PROCSCHD_AUTH_TOKEN || "").then(ps => {
+    console.log("[Leafvote] Procschd connected successfully.")
+    procschdServer = ps
+  }, err => {
+    console.error("Unable to connect to procschd server: " + err)
+  })
+} else {
+  console.error("Specify env.PROCSCHD_URL and env.PROCSCHD_AUTH_TOKEN to connect to procschd server.")
+}
+
 if (process.env.NODE_ENV !== 'production') {
   fs.watch(indexPath, list => {
     fs.readFile(indexPath, { encoding: 'utf8' }, (err, data) => {
@@ -25,6 +41,20 @@ module.exports = ({mongodb: db, addWSHandler}) => {
   rMain.get('/', function (req, res, next) {
     res.type('html')
     res.send(indexHtml)
+  })
+
+  let pdfBlobs = {}
+
+  rMain.get('/getpdf', function (req, res, next) {
+    let key = req.query.key
+    if (pdfBlobs[key]) {
+      res.type('pdf')
+      res.send(pdfBlobs[key])
+      delete pdfBlobs[key]
+    } else {
+      res.status(404)
+      res.send('Invalid key.')
+    }
   })
 
   rMain.use('/resources', express.static(path.join(__dirname, 'dist')))
@@ -487,6 +517,65 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               presentationPushInterval = null
             }
             return void reply({})
+          } else if (obj.type === "printTickets") {
+            let voters = obj.voters
+            if (!Array.isArray(voters)) {
+              return void reply({
+                error: "Invalid type for .voters"
+              })
+            }
+            if (!procschdServer) {
+              return void reply({
+                error: "Service not available."
+              })
+            }
+            procschdServer.runTask({
+              imageId: "runner/leafvote-generate-pdf",
+              stdin: voters.join("\n"),
+              fetchArtifacts: ["/tmp/in.pdf"]
+            }).then(taskId => procschdServer.taskInfo(taskId, true))
+              .then(taskInfo => {
+                if (taskInfo.error) {
+                  if (taskInfo.error.indexOf('exited') >= 0) {
+                    console.error('procschd container error: ' + taskInfo.error + '\n    stdout = ' + taskInfo.stdout + '\n    stderr = ' + taskInfo.stderr)
+                  }
+                  return void reply({error: taskInfo.error})
+                }
+                procschdServer.downloadArtifact(taskInfo.id, "/tmp/in.pdf").then(ss => {
+                  let chunks = []
+                  let replied = false
+                  ss.on('data', buf => {
+                    if (replied) return
+                    chunks.push(buf)
+                  })
+                  ss.on('end', () => {
+                    if (replied) return
+                    replied = true
+                    let pdfBlob = Buffer.concat(chunks)
+                    crypto.randomBytes(16, (err, buf) => {
+                      if (err) {
+                        return void reply({error: err.toString()})
+                      }
+                      let key = buf.toString('hex')
+                      pdfBlobs[key] = pdfBlob
+                      reply({error: null, url: '/getpdf?key=' + encodeURIComponent(key)})
+                    })
+                  })
+                  ss.on('error', err => {
+                    if (replied) return
+                    replied = true
+                    reply({error: err.toString()})
+                  })
+                }, err => {
+                  reply({
+                    error: err.toString()
+                  })
+                })
+              }, err => {
+                reply({
+                  error: err.toString()
+                })
+              })
           } else {
             throw new Error(`Invalid message type ${obj.type}`)
           }
