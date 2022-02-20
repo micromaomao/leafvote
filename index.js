@@ -530,7 +530,7 @@ module.exports = ({mongodb: db, addWSHandler}) => {
               })
             }
             procschdServer.runTask({
-              imageId: "runner/leafvote-generate-pdf",
+              imageId: "ghcr.io/micromaomao/leafvote-tex-image",
               stdin: voters.join("\n"),
               fetchArtifacts: ["/tmp/in.pdf"]
             }).then(taskId => procschdServer.taskInfo(taskId, true))
