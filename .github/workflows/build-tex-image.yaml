@@ -1,0 +1,24 @@
+name: Build TeX Image
+on:
+  push:
+    branches:
+      - master
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: >
+          cd tex-image &&
+          make &&
+          docker build . -t ghcr.io/micromaomao/leafvote-tex-image &&
+          cd ..
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        if: ${{ github.event_name == 'push' && github.ref_name == 'master' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: >
+          docker push ghcr.io/micromaomao/leafvote-tex-image

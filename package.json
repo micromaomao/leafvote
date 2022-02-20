@@ -55,6 +55,6 @@
     "mongoose": ">=4.0.0"
   },
   "dependencies": {
-    "procschd": "^0.1.0"
+    "procschd": "^0.1.1"
   }
 }
