@@ -65,7 +65,10 @@ module.exports = [
         minify: dev ? false : {removeComments: true, useShortDoctype: true, sortClassName: true, sortAttributes: true},
         chunks: [ 'clientrender' ],
         inject: false
+      }),
+      new webpack.DefinePlugin({
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV)
       })
-    ].filter(x => x !== null)
+    ]
   })
 ]
