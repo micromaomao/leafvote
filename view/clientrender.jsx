@@ -12,8 +12,6 @@ const TicketTex = require('raw-loader!../voterticket.tex')
 window.requestIdleCallback = window.requestIdleCallback || (func => setTimeout(func, 1000))
 window.cancelIdleCallback = window.cancelIdleCallback || (id => clearTimeout(id))
 
-require('style-loader!./layout.sass')
-
 class AppMain extends React.Component {
   constructor (props) {
     super(props)

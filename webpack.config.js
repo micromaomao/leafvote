@@ -7,7 +7,18 @@ baseConfig = {
   mode: dev ? 'development' : 'production',
   module: {
     rules: [
-      { test: /\.sass$/, use: ['css-loader', 'sass-loader'] },
+      {
+        test: /\.sass$/, use: [
+          {
+            loader: 'css-loader',
+            options: {
+              exportType: 'string'
+            }
+          }, {
+            loader: 'sass-loader'
+          }
+        ]
+      },
       {
         test: /\.jsx$/,
         use: [
